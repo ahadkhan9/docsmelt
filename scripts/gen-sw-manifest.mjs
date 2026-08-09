@@ -11,6 +11,7 @@ import { join } from "node:path";
 
 export function collectShellAssets(outDir) {
   const assets = [];
+  const outParts = outDir.split(/[\\/]/);
   const walk = (dir) => {
     for (const name of readdirSync(dir)) {
       const full = join(dir, name);
@@ -19,7 +20,8 @@ export function collectShellAssets(outDir) {
       } else if (name.endsWith(".wasm")) {
         // engine → lazy runtime cache, not precache
       } else {
-        assets.push("/" + full.split(/[\\/]/).slice(1).join("/"));
+        const rel = full.split(/[\\/]/).slice(outParts.length).join("/");
+        assets.push("/" + rel);
       }
     }
   };
