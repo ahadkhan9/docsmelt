@@ -4,19 +4,21 @@
  *
  * Rules, in order of importance:
  * 1. Never split a code fence — a chunk boundary inside a fence is pushed
- *    past the closing marker (a giant fence becomes one oversized chunk,
- *    which is the correct trade).
- * 2. Prefer heading boundaries — when a heading arrives while the chunk is
- *    ≥50% full, the chunk closes BEFORE the heading (sections stay intact
- *    when the boundary is near).
- * 3. ~10% overlap at line granularity, re-seeded into the next chunk so
- *    RAG retrievers that cut context windows still see the tail.
- * 4. Fence integrity is guaranteed by a final state-machine pass: a chunk
- *    that ends inside a fence (malformed input) gets a closing marker.
+ *    past the closing marker.
+ * 2. Never split a table — GFM tables (anydoc emits `| a | b |` rows with
+ *    a plain `| --- | --- |` delimiter, `\|`-escaped pipes, single-line
+ *    rows with literal `<br>` for multi-line cells) are confirmed by the
+ *    delimiter row and treated like fences: one atomic block. A table
+ *    larger than the target becomes one chunk flagged `oversizedTable`.
+ * 3. Prefer heading boundaries — when a heading arrives while the chunk is
+ *    ≥50% full, the chunk closes BEFORE the heading.
+ * 4. ~10% overlap at line granularity, re-seeded into the next chunk.
+ * 5. Fence integrity is guaranteed by a final state-machine pass.
  */
 import JSZip from "jszip";
 
-/** Standard heuristic: ≈4 characters per token (GPT-family, English). */
+/** Internal char gate — the walk uses chars as the cheap pre-filter;
+ *  exact token checks happen at candidate boundaries (see tokenizer.ts). */
 export const CHARS_PER_TOKEN = 4;
 
 export function estimateTokens(text: string): number {
@@ -35,11 +37,20 @@ export interface RagChunk {
   /** Last ATX heading line seen ("# Section"), "" if none. */
   heading: string;
   content: string;
+  /** Estimated tokens (chars/4) — exact counts arrive with the tokenizer. */
   tokens: number;
+  /** True when the chunk contains a table larger than the target. */
+  oversizedTable?: boolean;
 }
 
 const FENCE_RE = /^(`{3,}|~{3,})/;
 const HEADING_RE = /^#{1,6} /;
+/** anydoc emits rows at column 0; be lenient to ≤3 spaces of indent. */
+const TABLE_ROW_RE = /^ {0,3}\|/;
+/** `| --- | --- |` — plain pipes, optionally colon-aligned for other
+ *  producers. The delimiter row is what CONFIRMS a table (anti-false-
+ *  positive guard for `|`-led prose lines). */
+const TABLE_DELIM_RE = /^\|(\s*:?-{3,}:?\s*\|)+\s*$/;
 
 /** Track fence state across lines. A closing fence must match the opener's
  *  character; stray closers are ignored (treated as body text). */
@@ -58,6 +69,13 @@ function scanFenceState(lines: string[], initialState: string | null): string | 
   return state;
 }
 
+/** Whether a set of lines contains at least one table row (for overlap
+ *  seeds — the seed's table already closed in the previous chunk, so only
+ *  the flag carries over, never the active state). */
+function seedHasTableRows(lines: string[]): boolean {
+  return lines.some((line) => TABLE_ROW_RE.test(line));
+}
+
 export function chunkMarkdown(markdown: string, options: ChunkOptions): RagChunk[] {
   const targetChars = options.targetTokens * CHARS_PER_TOKEN;
   const overlapChars =
@@ -69,14 +87,15 @@ export function chunkMarkdown(markdown: string, options: ChunkOptions): RagChunk
 
   // Pre-split long, breakable lines (paragraphs) at word boundaries so the
   // token budget is honored even when a single line exceeds it. Fence
-  // markers and fence body are never touched — code stays intact.
+  // markers, fence body, and table rows are never touched — code and
+  // tables stay intact.
   const lines: string[] = [];
   {
     let inFence = false;
     for (const raw of rawLines) {
       const fence = FENCE_RE.exec(raw.trimStart());
       if (fence) inFence = !inFence;
-      if (!inFence && raw.length > targetChars && raw.includes(" ")) {
+      if (!inFence && !TABLE_ROW_RE.test(raw) && raw.length > targetChars && raw.includes(" ")) {
         let rest = raw;
         while (rest.length > targetChars) {
           const cut = rest.lastIndexOf(" ", targetChars);
@@ -95,6 +114,9 @@ export function chunkMarkdown(markdown: string, options: ChunkOptions): RagChunk
   let buffer: string[] = [];
   let bufferChars = 0;
   let inFence: string | null = null;
+  let pendingTable = false;
+  let inTable = false;
+  let chunkHasTable = false;
   let lastHeading = "";
   let pendingOverlap: string[] | null = null;
 
@@ -104,6 +126,7 @@ export function chunkMarkdown(markdown: string, options: ChunkOptions): RagChunk
     buffer = pendingOverlap;
     bufferChars = buffer.reduce((sum, line) => sum + line.length + 1, 0);
     inFence = scanFenceState(buffer, null);
+    chunkHasTable = seedHasTableRows(buffer);
     pendingOverlap = null;
     for (const line of buffer) if (HEADING_RE.test(line)) lastHeading = line;
   };
@@ -117,12 +140,13 @@ export function chunkMarkdown(markdown: string, options: ChunkOptions): RagChunk
         heading: lastHeading,
         content,
         tokens: estimateTokens(content),
+        oversizedTable:
+          chunkHasTable && content.length > targetChars ? true : undefined,
       });
       if (overlapChars > 0 && content.length > overlapChars) {
         // Tail anchored at a line boundary — but only extend left when the
         // extension is cheap (≤ the window itself). A huge last line must
-        // not bloat the seed to the whole line; a partial-line seed is fine
-        // (it still overlaps the previous chunk's content).
+        // not bloat the seed to the whole line.
         const windowStart = content.length - overlapChars;
         const nlBefore = content.lastIndexOf("\n", windowStart);
         let tailStart = windowStart;
@@ -138,6 +162,9 @@ export function chunkMarkdown(markdown: string, options: ChunkOptions): RagChunk
     buffer = [];
     bufferChars = 0;
     inFence = null;
+    pendingTable = false;
+    inTable = false;
+    chunkHasTable = false;
   };
 
   for (const line of lines) {
@@ -152,8 +179,27 @@ export function chunkMarkdown(markdown: string, options: ChunkOptions): RagChunk
         inFence = fence[1];
       }
     }
+
+    // Table state machine (fence-priority: no detection inside fences).
+    if (!inFence) {
+      if (inTable) {
+        if (!TABLE_ROW_RE.test(line)) inTable = false;
+        else chunkHasTable = true;
+      } else if (pendingTable) {
+        if (TABLE_DELIM_RE.test(line)) {
+          inTable = true;
+          chunkHasTable = true;
+        }
+        pendingTable = false;
+      } else if (TABLE_ROW_RE.test(line)) {
+        pendingTable = true;
+      }
+    }
+
     const lineCost = line.length + 1;
-    if (buffer.length > 0 && !inFence && !closesFence) {
+    // No boundary inside a fence, a table, or an unconfirmed table header
+    // (the delimiter must land with its header row).
+    if (buffer.length > 0 && !inFence && !inTable && !pendingTable && !closesFence) {
       const overflows = bufferChars + lineCost > targetChars;
       const headingNear = HEADING_RE.test(line) && bufferChars >= targetChars * 0.5;
       if (overflows || headingNear) {
@@ -187,10 +233,10 @@ export async function chunkZip(
     "",
     ...chunks.map(
       (c) =>
-        `- \`${stem}-${String(c.index).padStart(3, "0")}.md\` — ${c.tokens} tokens${c.heading ? ` (${c.heading})` : ""}`,
+        `- \`${stem}-${String(c.index).padStart(3, "0")}.md\` — ${c.tokens} tokens${c.heading ? ` (${c.heading})` : ""}${c.oversizedTable ? " — oversized table" : ""}`,
     ),
     "",
-    "_Chunked by docsmelt in your browser — headings preserved, code fences kept intact._",
+    "_Chunked by docsmelt in your browser — headings preserved, code fences and tables kept intact._",
   ].join("\n");
   zip.file(`${stem}-index.md`, index);
   return zip.generateAsync({

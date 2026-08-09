@@ -170,3 +170,88 @@ describe("chunkZip", () => {
     expect(index).toContain("report.docx");
   });
 });
+
+// ── tables (anydoc emission: `| a | b |`, `| --- | --- |`, `\|`, `<br>`) ──
+
+const ANYDOC_TABLE = [
+  "| Metal | Melts at °C |",
+  "| --- | --- |",
+  "| Iron \\| cast | 1538<br>second line |",
+  "| Gold | 1064 |",
+].join("\n");
+
+describe("chunkMarkdown — atomic tables", () => {
+  it("never splits inside a confirmed table", () => {
+    // filler pushes the budget so a boundary would land inside the table
+    const md = `# Alloys\n\n${"filler ".repeat(70)}\n\n${ANYDOC_TABLE}\n\nOutro text.`;
+    const chunks = chunkMarkdown(md, { targetTokens: 100 }); // 400 chars — boundary lands inside
+    expect(chunks.length).toBeGreaterThan(1);
+    const owner = chunks.find((c) => c.content.includes("Metal"));
+    expect(owner).toBeDefined();
+    expect(owner!.content).toContain("| Gold | 1064 |"); // full table in ONE chunk
+    // the boundary closed AFTER the table, not inside it
+    const after = chunks.filter((c) => c !== owner);
+    expect(after.every((c) => !c.content.includes("|"))).toBe(true);
+  });
+
+  it("keeps a table at chunk start whole", () => {
+    const md = `${ANYDOC_TABLE}\n\nfiller text\n\nfiller text`;
+    const chunks = chunkMarkdown(md, { targetTokens: 100 });
+    const first = chunks[0];
+    expect(first.content).toContain("Metal");
+    expect(first.content).toContain("| Gold | 1064 |");
+  });
+
+  it("flags oversized tables but never splits them", () => {
+    const bigTable = [
+      "| Col | Value |",
+      "| --- | --- |",
+      ...Array.from({ length: 60 }, (_, i) => `| row ${i} | ${"x".repeat(40)} |`),
+    ].join("\n"); // ~60 × 60 chars ≈ 3600 chars, target 400
+    const chunks = chunkMarkdown(`# T\n\n${bigTable}`, { targetTokens: 100 });
+    const owner = chunks.find((c) => c.content.includes("Col"));
+    expect(owner).toBeDefined();
+    expect(owner!.content).toContain("| row 59 |"); // closer present — never split
+    expect(owner!.oversizedTable).toBe(true);
+    for (const c of chunks) if (c !== owner) expect(c.oversizedTable).toBeUndefined();
+  });
+
+  it("delimiter confirmation: a | -led prose line is NOT a table", () => {
+    const prose = "# Notes\n\nJust a line | with pipes\n\nand another | pipe line here.";
+    const chunks = chunkMarkdown(prose, { targetTokens: 100 });
+    // splits normally by size/heading, and no chunk carries the table flag
+    for (const c of chunks) expect(c.oversizedTable).toBeUndefined();
+    expect(chunks.map((c) => c.content).join("\n")).toContain("Just a line | with pipes");
+  });
+
+  it("| inside a code fence is code, never a table", () => {
+    const md = "# Code\n\n```\n| a | b |\n| --- | --- |\n| 1 | 2 |\n```\n\nAfter.";
+    const chunks = chunkMarkdown(md, { targetTokens: 100 });
+    const codeChunk = chunks.find((c) => c.content.includes("| a | b |"));
+    expect(codeChunk).toBeDefined();
+    expect(codeChunk!.content).toContain("```"); // fence intact, table flag absent
+    expect(codeChunk!.oversizedTable).toBeUndefined();
+  });
+
+  it("CSV-looking prose rows without a delimiter are not tables", () => {
+    const md = "# Data\n\nname,value\nIron,1538\nGold,1064\n\nMore text here.";
+    const chunks = chunkMarkdown(md, { targetTokens: 100 });
+    for (const c of chunks) expect(c.oversizedTable).toBeUndefined();
+  });
+
+  it("overlap seeds may carry table rows without breaking the next chunk", () => {
+    // table ends near a chunk boundary; the seed captures its last row
+    const md = `${"filler ".repeat(90)}\n\n${ANYDOC_TABLE}\n\n${"tail ".repeat(80)}`;
+    const chunks = chunkMarkdown(md, { targetTokens: 100, overlapTokens: 10 });
+    expect(chunks.length).toBeGreaterThan(1);
+    // every chunk's tables (if any) are still atomic — no dangling rows
+    for (const c of chunks) {
+      const rows = c.content.split("\n").filter((l) => /^ {0,3}\|/.test(l));
+      if (rows.length > 0 && !c.content.includes("| --- |")) {
+        // seed-only rows: the row may appear WITHOUT its table — allowed
+        // for overlap context, but must be a full row line (never split)
+        expect(rows.every((r) => r.startsWith("|") && r.endsWith("|"))).toBe(true);
+      }
+    }
+  });
+});
