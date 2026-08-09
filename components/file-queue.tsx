@@ -62,7 +62,7 @@ export function FileQueue({
           </span>
         </h2>
         {finished && (
-          <Button variant="ghost" size="sm" className="min-h-9" onClick={onClearFinished}>
+          <Button variant="ghost" size="sm" className="min-h-10" onClick={onClearFinished}>
             Clear finished
           </Button>
         )}
@@ -152,7 +152,7 @@ function QueueRow({
       aria-label={`${job.file.name} — ${job.status}`}
       onClick={onSelect}
       className={cn(
-        "relative cursor-pointer px-4 py-3 transition-colors duration-150 [content-visibility:auto]",
+        "relative cursor-pointer px-4 py-3 transition-colors duration-150 [content-visibility:auto] [contain-intrinsic-size:auto_64px]",
         selected ? "bg-accent/60" : "hover:bg-accent/30",
       )}
     >

@@ -107,7 +107,7 @@ export function FurnaceDropzone({
         onDrop={onDrop}
         onClick={openPicker}
         className={cn(
-          "relative cursor-pointer select-none overflow-hidden rounded-xl border bg-card outline-none transition-colors duration-200",
+          "relative cursor-pointer select-none overflow-hidden rounded-xl border bg-card outline-none transition-colors duration-200 active:bg-accent/40",
           dragActive ? "border-molten" : "border-border",
         )}
       >
@@ -119,7 +119,7 @@ export function FurnaceDropzone({
             <Button
               variant="outline"
               size="sm"
-              className="min-h-9"
+              className="min-h-10"
               onClick={(e) => {
                 e.stopPropagation();
                 openPicker();
@@ -157,7 +157,7 @@ export function FurnaceDropzone({
       onDrop={onDrop}
       onClick={openPicker}
       className={cn(
-        "relative cursor-pointer select-none overflow-hidden rounded-2xl border bg-card outline-none transition-colors duration-200",
+        "relative cursor-pointer select-none overflow-hidden rounded-2xl border bg-card outline-none transition-colors duration-200 active:bg-accent/40",
         dragActive ? "border-molten" : "border-border",
       )}
     >
@@ -170,8 +170,8 @@ export function FurnaceDropzone({
           Smelt documents into markdown.
         </h1>
         <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-steel">
-          PDF, DOCX, XLSX, PPTX, RTF, EPUB, ODS, CSV — converted in your browser.
-          Nothing is uploaded, so nothing can leak.
+          21 formats — PDF, DOCX, XLSX, PPTX, RTF, EPUB, ODS, CSV and more —
+          converted in your browser. Nothing is uploaded, so nothing can leak.
         </p>
         <div className="mt-8 flex items-center gap-2" aria-hidden>
           {FAMILIES.map((family) => (

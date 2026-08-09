@@ -29,8 +29,8 @@ the two.
 Headline (display face, sentence case):
 
 > **Smelt documents into markdown.**
-> *PDF, DOCX, XLSX, PPTX, RTF, EPUB, ODS, CSV — converted in your browser.
-> Nothing is uploaded, so nothing can leak.*
+> *21 formats — PDF, DOCX, XLSX, PPTX, RTF, EPUB, ODS, CSV and more —
+> converted in your browser. Nothing is uploaded, so nothing can leak.*
 
 ## 3. Palette (6 named colors + neutrals + family colors)
 

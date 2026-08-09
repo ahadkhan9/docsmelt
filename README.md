@@ -1,10 +1,9 @@
 # docsmelt 🔥
 
-**Smelt documents into markdown.** Drag-drop (or click, or paste) any office
-document — PDF, DOCX, XLSX, PPTX, RTF, EPUB, ODS, CSV and more — and it
+**Smelt documents into markdown.** Drag-drop (or click, or paste) any of 21
+office formats — PDF, DOCX, XLSX, PPTX, RTF, EPUB, ODS, CSV and more — and it
 converts to clean Markdown in your browser via WebAssembly. Nothing is
-uploaded, so nothing can leak. No server, no accounts, no files on disk
-anywhere but yours.
+uploaded, so nothing can leak. No server. No uploads. No accounts.
 
 Built on [Firecrawl AnyDoc](https://github.com/firecrawl/anydoc) (MIT) —
 the same engine that powers their Parse API, running fully client-side.
