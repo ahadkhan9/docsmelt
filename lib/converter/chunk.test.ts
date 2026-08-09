@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
-import { CHARS_PER_TOKEN, chunkMarkdown, chunkZip, estimateTokens } from "./chunk";
+import { CHARS_PER_TOKEN, chunkMarkdown, chunkZip, estimateTokens, resolveChunkOptions } from "./chunk";
 
 const fenceState = (content: string): "closed" | "open" => {
   let state: string | null = null;
@@ -329,5 +329,39 @@ describe("chunkMarkdown — exact token budgets (with gpt-tokenizer)", () => {
       const seedTokens = tok.count(cur.slice(0, n));
       expect(seedTokens).toBeLessThanOrEqual(15 + 60); // overlap + one line
     }
+  });
+});
+
+describe("resolveChunkOptions — presets, custom, overlap", () => {
+  it("maps presets and computes the auto ~10% overlap", () => {
+    expect(resolveChunkOptions({ preset: 256, overlapAuto: true })).toEqual({
+      targetTokens: 256,
+      overlapTokens: 26,
+    });
+    expect(resolveChunkOptions({ preset: 1024, overlapAuto: true })).toEqual({
+      targetTokens: 1024,
+      overlapTokens: 102,
+    });
+  });
+
+  it("custom tokens override the preset", () => {
+    expect(
+      resolveChunkOptions({ preset: 256, customTokens: 700, overlapAuto: true }),
+    ).toEqual({ targetTokens: 700, overlapTokens: 70 });
+    // a zero/negative custom falls back to the preset
+    expect(resolveChunkOptions({ preset: 512, customTokens: -5, overlapAuto: true })).toEqual({
+      targetTokens: 512,
+      overlapTokens: 51,
+    });
+  });
+
+  it("manual overlap wins; invalid manual falls back to auto", () => {
+    expect(
+      resolveChunkOptions({ preset: 512, overlapAuto: false, overlapTokens: 40 }),
+    ).toEqual({ targetTokens: 512, overlapTokens: 40 });
+    expect(resolveChunkOptions({ preset: 512, overlapAuto: false, overlapTokens: 0 })).toEqual({
+      targetTokens: 512,
+      overlapTokens: 51,
+    });
   });
 });

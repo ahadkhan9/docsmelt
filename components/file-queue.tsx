@@ -15,7 +15,12 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { chunkMarkdown, chunkZip, type RagChunk } from "@/lib/converter/chunk";
+import {
+  chunkMarkdown,
+  chunkZip,
+  resolveChunkOptions,
+  type RagChunk,
+} from "@/lib/converter/chunk";
 import { refine, type ErrorKind } from "@/lib/converter/errors";
 import { FAMILY_OF, FAMILY_TOKEN, FamilyGlyph, supportsZip } from "@/lib/converter/formats";
 import { loadTokenizer, type Tokenizer } from "@/lib/converter/tokenizer";
@@ -223,20 +228,29 @@ function QueueRow({
 }) {
   const [copied, setCopied] = useState(false);
   const [chunkOpen, setChunkOpen] = useState(false);
-  const [chunkSize, setChunkSize] = useState<number>(512);
+  const [chunkSize, setChunkSize] = useState<256 | 512 | 1024>(512);
+  const [customTokens, setCustomTokens] = useState("");
+  const [overlapAuto, setOverlapAuto] = useState(true);
+  const [overlapTokens, setOverlapTokens] = useState("");
   const [chunks, setChunks] = useState<RagChunk[] | null>(null);
   const [tokenizer, setTokenizer] = useState<Tokenizer | null>(null);
   const [chunkLoading, setChunkLoading] = useState(false);
   const family = job.format ? FAMILY_OF[job.format] : undefined;
 
-  const computeChunks = async (size: number) => {
+  const computeChunks = async () => {
     if (!job.markdown) return;
     setChunkLoading(true);
     try {
       // Lazy: the ~1 MB tokenizer vocab loads once, on the first open.
       const tok = await loadTokenizer();
       setTokenizer(tok);
-      setChunks(chunkMarkdown(job.markdown, { targetTokens: size }, tok));
+      const options = resolveChunkOptions({
+        preset: chunkSize,
+        customTokens: Number(customTokens) || undefined,
+        overlapAuto,
+        overlapTokens: Number(overlapTokens) || undefined,
+      });
+      setChunks(chunkMarkdown(job.markdown, options, tok));
     } finally {
       setChunkLoading(false);
     }
@@ -244,11 +258,11 @@ function QueueRow({
   const openChunks = () => {
     if (!job.markdown) return;
     setChunkOpen(true);
-    void computeChunks(chunkSize);
+    void computeChunks();
   };
-  const changeChunkSize = (size: number) => {
+  const changeChunkSize = (size: 256 | 512 | 1024) => {
     setChunkSize(size);
-    void computeChunks(size);
+    void computeChunks();
   };
   const downloadChunks = async () => {
     if (!chunks?.length) return;
@@ -415,7 +429,7 @@ function QueueRow({
           <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{error.hint}</p>
         </div>
       )}
-      {chunkOpen && chunks && (
+      {(chunkOpen && (chunks || chunkLoading)) && (
         <motion.div
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
@@ -436,17 +450,30 @@ function QueueRow({
                 <button
                   key={size}
                   onClick={() => changeChunkSize(size)}
-                  aria-pressed={chunkSize === size}
+                  aria-pressed={chunkSize === size && customTokens === ""}
                   className={cn(
                     "min-h-10 rounded-md px-3 font-mono text-[11px] uppercase tracking-wide transition-colors duration-150",
-                    chunkSize === size
+                    chunkSize === size && customTokens === ""
                       ? "bg-secondary text-foreground"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  {size} tok
+                  {size}
                 </button>
               ))}
+              <input
+                type="number"
+                min={32}
+                max={4096}
+                value={customTokens}
+                onChange={(e) => {
+                  setCustomTokens(e.target.value);
+                  void computeChunks();
+                }}
+                placeholder="custom"
+                aria-label="Custom chunk size in tokens"
+                className="min-h-10 w-24 rounded-md bg-transparent px-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+              />
             </div>
             {chunkLoading ? (
               <span className="font-mono text-[11px] text-muted-foreground">
@@ -476,6 +503,66 @@ function QueueRow({
                 Close
               </Button>
             </div>
+          </div>
+          <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/60 pt-2.5">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[11px] text-muted-foreground">overlap</span>
+              <div
+                className="flex rounded-lg border border-border bg-background p-0.5"
+                role="group"
+                aria-label="Overlap mode"
+              >
+                <button
+                  onClick={() => {
+                    setOverlapAuto(true);
+                    void computeChunks();
+                  }}
+                  aria-pressed={overlapAuto}
+                  className={cn(
+                    "min-h-9 rounded-md px-2.5 font-mono text-[10px] uppercase tracking-wide transition-colors duration-150",
+                    overlapAuto
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  auto ~10%
+                </button>
+                <button
+                  onClick={() => {
+                    setOverlapAuto(false);
+                    void computeChunks();
+                  }}
+                  aria-pressed={!overlapAuto}
+                  className={cn(
+                    "min-h-9 rounded-md px-2.5 font-mono text-[10px] uppercase tracking-wide transition-colors duration-150",
+                    !overlapAuto
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  manual
+                </button>
+              </div>
+              {!overlapAuto && (
+                <input
+                  type="number"
+                  min={0}
+                  max={1024}
+                  value={overlapTokens}
+                  onChange={(e) => {
+                    setOverlapTokens(e.target.value);
+                    void computeChunks();
+                  }}
+                  placeholder="tokens"
+                  aria-label="Overlap in tokens"
+                  className="min-h-9 w-20 rounded-md border border-border bg-background px-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
+                />
+              )}
+            </div>
+            <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">
+              Counted with {tokenLabel} · 10–20% overlap is the common range — one published
+              benchmark found zero benefit, so treat it as cheap insurance, not a guarantee.
+            </p>
           </div>
         </motion.div>
       )}

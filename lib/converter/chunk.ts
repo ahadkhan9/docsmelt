@@ -341,3 +341,26 @@ export async function chunkZip(
     compressionOptions: { level: 6 },
   });
 }
+
+/** UI-level chunk options — presets, a free-form override, and the
+ *  overlap control (auto ~10%, or explicit tokens). */
+export interface ChunkUiOptions {
+  preset: 256 | 512 | 1024;
+  /** Free-form override; positive values win over the preset. */
+  customTokens?: number;
+  overlapAuto: boolean;
+  /** Explicit overlap in tokens (used when overlapAuto is false). */
+  overlapTokens?: number;
+}
+
+/** Resolve UI state into chunker options (unit-tested). */
+export function resolveChunkOptions(ui: ChunkUiOptions): ChunkOptions {
+  const targetTokens =
+    ui.customTokens && ui.customTokens > 0 ? ui.customTokens : ui.preset;
+  const autoOverlap = Math.max(1, Math.round(targetTokens * 0.1));
+  const overlapTokens =
+    ui.overlapAuto || !ui.overlapTokens || ui.overlapTokens <= 0
+      ? autoOverlap
+      : ui.overlapTokens;
+  return { targetTokens, overlapTokens };
+}
