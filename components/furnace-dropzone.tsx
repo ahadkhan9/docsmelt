@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Flame } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,16 +29,27 @@ export function FurnaceDropzone({
   compact = false,
   engine,
   onFiles,
+  pickerRef,
 }: {
   compact?: boolean;
   engine: "cold" | "loading" | "ready" | "error";
   onFiles: (files: File[], meta?: DropMeta) => void;
+  /** Exposes the file-picker trigger to the global ⌘O shortcut. */
+  pickerRef?: React.MutableRefObject<(() => void) | null>;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const dragDepth = useRef(0);
 
   const openPicker = useCallback(() => inputRef.current?.click(), []);
+
+  // Hand the trigger to the global ⌘O shortcut while mounted.
+  useEffect(() => {
+    if (pickerRef) pickerRef.current = openPicker;
+    return () => {
+      if (pickerRef) pickerRef.current = null;
+    };
+  }, [pickerRef, openPicker]);
   const handleFiles = useCallback(
     (list: FileList | File[]) => {
       const files = Array.from(list);

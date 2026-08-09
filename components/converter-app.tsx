@@ -5,6 +5,7 @@ import { MotionConfig } from "motion/react";
 import { Lock } from "lucide-react";
 import { refine, type ErrorKind } from "@/lib/converter/errors";
 import { Button } from "@/components/ui/button";
+import { handleShortcut } from "@/lib/converter/shortcuts";
 import { useConverter } from "@/lib/converter/useConverter";
 import { FurnaceDropzone } from "./furnace-dropzone";
 import { FileQueue } from "./file-queue";
@@ -13,6 +14,26 @@ import { IngotPreview } from "./ingot-preview";
 const FORMATS =
   "doc · docx · docm · odt · rtf · pdf · xls · xlsx · xlsm · xlsb · ods · csv · " +
   "ppt · pps · pot · pptx · pptm · ppsx · ppsm · odp · epub";
+
+/** Best-effort global paste (⌘⇧V): read the clipboard, hand files to the app.
+ *  Fails silently when permission is denied — the dropzone paste hint stays. */
+async function pasteFromClipboard(addFiles: (files: File[]) => void): Promise<void> {
+  try {
+    const items = await navigator.clipboard.read();
+    const files: File[] = [];
+    for (const item of items) {
+      for (const type of item.types) {
+        if (type.startsWith("text/")) continue;
+        const blob = await item.getType(type);
+        const ext = type.split("/")[1]?.replace("jpeg", "jpg") ?? "bin";
+        files.push(new File([blob], `pasted.${ext}`, { type }));
+      }
+    }
+    if (files.length > 0) addFiles(files);
+  } catch {
+    // clipboard permission denied — nothing to do
+  }
+}
 
 export default function ConverterApp() {
   const c = useConverter();
@@ -50,6 +71,56 @@ export default function ConverterApp() {
     navigator.serviceWorker.register("/sw.js").catch(() => {
       // offline is a bonus, never a failure mode
     });
+  }, []);
+
+  // Keyboard-first workflow. The hook value is read through a ref so the
+  // listener subscribes once.
+  const cRef = useRef(c);
+  cRef.current = c;
+  const pickerRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName ?? "";
+      const inEditable =
+        tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ||
+        target?.isContentEditable === true;
+      const app = cRef.current;
+      const action = handleShortcut(event, {
+        inEditable,
+        rowIds: app.jobs.map((j) => j.id),
+      });
+      if (!action) return;
+      event.preventDefault();
+      switch (action.type) {
+        case "open-picker":
+          pickerRef.current?.();
+          break;
+        case "paste":
+          void pasteFromClipboard(app.addFiles);
+          break;
+        case "download-active":
+          if (app.selected?.markdown) app.downloadMarkdown(app.selected.id);
+          break;
+        case "escape": {
+          const active = [...app.jobs]
+            .reverse()
+            .find((j) =>
+              ["queued", "detecting", "smelting", "packing"].includes(j.status),
+            );
+          if (active) app.cancel(active.id);
+          else app.select(null);
+          break;
+        }
+        case "select-row": {
+          const job = app.jobs[action.index];
+          if (job) app.select(job.id);
+          break;
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
   return (
@@ -102,7 +173,7 @@ export default function ConverterApp() {
         <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 pb-16 pt-6 sm:px-6 sm:pt-10">
           {hasJobs ? (
             <div className="flex flex-col gap-5">
-              <FurnaceDropzone compact engine={c.engine} onFiles={c.addFiles} />
+              <FurnaceDropzone compact engine={c.engine} onFiles={c.addFiles} pickerRef={pickerRef} />
               <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
                 <FileQueue
                   jobs={c.jobs}
@@ -134,7 +205,7 @@ export default function ConverterApp() {
               </div>
             </div>
           ) : (
-            <FurnaceDropzone engine={c.engine} onFiles={c.addFiles} />
+            <FurnaceDropzone engine={c.engine} onFiles={c.addFiles} pickerRef={pickerRef} />
           )}
         </main>
 
@@ -150,6 +221,23 @@ export default function ConverterApp() {
               <p className="mt-1.5 font-mono text-[11px] text-muted-foreground">
                 Markdown and plain text pass through unchanged — no conversion needed.
               </p>
+              <div className="shortcuts-hint mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-muted-foreground">
+                <span>
+                  <kbd className="kbd">⌘O</kbd> open
+                </span>
+                <span>
+                  <kbd className="kbd">⌘⇧V</kbd> paste
+                </span>
+                <span>
+                  <kbd className="kbd">⌘D</kbd> download
+                </span>
+                <span>
+                  <kbd className="kbd">Esc</kbd> cancel / clear
+                </span>
+                <span>
+                  <kbd className="kbd">1–9</kbd> select
+                </span>
+              </div>
             </div>
             <div className="font-mono text-[11px] leading-relaxed text-muted-foreground">
               <p>

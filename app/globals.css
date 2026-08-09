@@ -188,6 +188,28 @@
   scrollbar-color: var(--border) transparent;
 }
 
+/* Keyboard-shortcut hint — keyboard-only by design, hidden on touch. */
+.kbd {
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 0.375rem;
+  background: var(--card);
+  padding: 0 0.375rem;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--steel);
+}
+.shortcuts-hint {
+  display: flex;
+}
+@media (pointer: coarse) {
+  .shortcuts-hint {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
