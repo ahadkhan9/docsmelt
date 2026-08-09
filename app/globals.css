@@ -291,3 +291,12 @@ body.dm-resizing * {
     animation-timeline: --pane;
   }
 }
+
+/* Chunked blocks rely on content-visibility for bounded layout; where it
+   is unsupported, contain layout/style/paint so off-screen chunks never
+   force global reflows and stay sequentially keyboard-reachable. */
+@supports not (content-visibility: auto) {
+  [data-chunk] {
+    contain: layout style paint;
+  }
+}

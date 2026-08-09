@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { MarkdownView } from "./markdown";
 import type { RagChunk } from "@/lib/converter/chunk";
 import type { DocSection } from "@/lib/converter/sections";
+import { MAX_TEXT_NODE_CHARS } from "@/lib/converter/preview";
 import { cn, downloadBlob } from "@/lib/utils";
 
 /** The section block — shared by the desktop and mobile previews. */
@@ -55,10 +56,13 @@ export function ChunkBlock({
   chunk,
   stem,
   tokenLabel,
+  showHeading = true,
 }: {
   chunk: RagChunk;
   stem: string;
   tokenLabel: string;
+  /** Stamp the divider heading only on the first chunk of a same-heading run. */
+  showHeading?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -92,7 +96,7 @@ export function ChunkBlock({
         <span className="font-mono text-[11px] text-paper-muted">
           · {chunk.tokens} {tokenLabel}
         </span>
-        {headingTail && (
+        {showHeading && headingTail && (
           <span className="truncate font-mono text-[11px] text-paper-muted">
             · {headingTail.replace(/^#{1,6} +/, "")}
           </span>
@@ -129,7 +133,19 @@ export function ChunkBlock({
           </Button>
         </span>
       </div>
-      <MarkdownView source={chunk.content} />
+      {chunk.content.length > MAX_TEXT_NODE_CHARS ? (
+        <>
+          <p className="mb-2 rounded-lg border border-dashed border-paper-line bg-paper-chip px-3 py-2 font-mono text-xs text-paper-muted">
+            Chunk {chunk.index} is {chunk.content.length.toLocaleString()} chars — showing the
+            first {MAX_TEXT_NODE_CHARS.toLocaleString()}. Use Copy or Download for the full chunk.
+          </p>
+          <pre className="my-0 whitespace-pre-wrap font-mono text-[13px] leading-relaxed">
+            {chunk.content.slice(0, MAX_TEXT_NODE_CHARS)}
+          </pre>
+        </>
+      ) : (
+        <MarkdownView source={chunk.content} />
+      )}
     </section>
   );
 }

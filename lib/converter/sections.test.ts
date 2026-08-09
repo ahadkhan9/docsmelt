@@ -2,7 +2,7 @@
  * Section model tests — the navigated preview's parser.
  */
 import { describe, expect, it } from "vitest";
-import { parseSections, sectionForHeading, slugify } from "./sections";
+import { outlineFromChunkMetas, parseSections, sectionForHeading, slugify } from "./sections";
 
 describe("slugify", () => {
   it("lowercases, dashes non-alnum, trims, and falls back", () => {
@@ -60,5 +60,39 @@ describe("sectionForHeading", () => {
     expect(sectionForHeading(outline, ["# Report"])?.id).toBe("report");
     expect(sectionForHeading(outline, [])).toBeNull();
     expect(sectionForHeading(outline, ["### Missing"])).toBeNull();
+  });
+});
+
+describe("outlineFromChunkMetas", () => {
+  it("builds a bounded outline from chunk heading paths", () => {
+    const out = outlineFromChunkMetas([["# Report"], ["## Budget"], ["## Summary"]]);
+    expect(out.preambleLines).toEqual([]);
+    expect(out.sections.map((s) => s.text)).toEqual(["Report", "Budget", "Summary"]);
+    expect(out.sections.map((s) => s.level)).toEqual([1, 2, 2]);
+    expect(out.sections.map((s) => s.index)).toEqual([1, 2, 3]);
+  });
+
+  it("dedupes repeated headings to their first occurrence", () => {
+    const out = outlineFromChunkMetas([["# intro"], ["# intro"], ["# intro"]]);
+    expect(out.sections.map((s) => s.id)).toEqual(["intro"]);
+  });
+
+  it("suffixes distinct headings that slug-collide (mirrors parseSections)", () => {
+    const out = outlineFromChunkMetas([["# Intro"], ["# Intro!"], ["# intro"]]);
+    // Exact-text dedup keeps all three (different texts), but "Intro" and
+    // "Intro!" both slugify to "intro", so the second gets "-2".
+    expect(out.sections.map((s) => s.text)).toEqual(["Intro", "Intro!", "intro"]);
+    expect(out.sections.map((s) => s.id)).toEqual(["intro", "intro-2", "intro-3"]);
+  });
+
+  it("skips empty paths and empty heading tails", () => {
+    const out = outlineFromChunkMetas([[], ["   "], ["## Real"], [""]]);
+    expect(out.sections.map((s) => s.text)).toEqual(["Real"]);
+  });
+
+  it("returns an empty outline for no paths", () => {
+    const out = outlineFromChunkMetas([]);
+    expect(out.sections).toEqual([]);
+    expect(out.preambleLines).toEqual([]);
   });
 });

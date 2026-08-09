@@ -109,6 +109,37 @@ export function parseSections(markdown: string): DocOutline {
   return { sections, preambleLines };
 }
 
+/**
+ * Bounded outline from chunk heading paths (huge-doc preview) — never scans
+ * the full markdown. Dedupes repeated headings and slugifies with -2
+ * suffixes (mirrors parseSections' id scheme), so sectionForHeading stays
+ * consistent with the anchors chunks point at. preambleLines always empty.
+ */
+export function outlineFromChunkMetas(headingPaths: string[][]): DocOutline {
+  const sections: DocSection[] = [];
+  const usedIds = new Set<string>();
+  const seen = new Set<string>();
+  let index = 0;
+  for (const path of headingPaths) {
+    const tail = path[path.length - 1];
+    if (!tail) continue;
+    const m = tail.match(/^(#{1,6}) +(.*)$/);
+    const text = (m ? m[2] : tail).trim();
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    index += 1;
+    let id = slugify(text);
+    let n = 2;
+    while (usedIds.has(id)) {
+      id = `${slugify(text)}-${n}`;
+      n += 1;
+    }
+    usedIds.add(id);
+    sections.push({ id, level: m ? m[1].length : 1, heading: tail, text, lines: [tail], index });
+  }
+  return { sections, preambleLines: [] };
+}
+
 /** The section a chunk belongs to (by its headingPath tail) — lets the
  *  outline highlight the section containing the active chunk. */
 export function sectionForHeading(

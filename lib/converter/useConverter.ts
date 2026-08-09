@@ -16,6 +16,8 @@ import { buildExportZip, stemOf, zipDocument } from "./zip";
 import { supportsZip } from "./formats";
 import { rangeSelect, toggleChecked } from "./selection";
 import { chunkMarkdownAsync, chunkZip, resolveChunkOptions, type RagChunk } from "./chunk";
+import { HUGE_MD_CHARS } from "./preview";
+import { announce } from "@/lib/announce";
 import { clearHistory, deleteRecords, loadAll, recordFromJob, recordToJobView, saveRecord } from "./history";
 import { downloadBlob } from "@/lib/utils";
 
@@ -45,6 +47,9 @@ export interface JobView {
   /** Computed chunks when chunking is enabled (Flow B preview). */
   chunks?: RagChunk[];
   chunkEncoding?: string;
+  /** Chunk pipeline lifecycle — drives the huge-doc loading state.
+   *  Not persisted to history, so restored huge jobs re-chunk on select. */
+  chunksStatus?: "idle" | "running" | "done" | "error";
 }
 
 /** Global chunking settings — the Flow A/B switch (docs/preview-design.md §6). */
@@ -136,56 +141,75 @@ export function useConverter() {
       });
   }, []);
 
-  /** Compute chunks for a finished job when chunking is enabled (Flow B).
+  /** Compute chunks for a finished job (Flow B). Huge docs (> HUGE_MD_CHARS)
+   *  chunk UNCONDITIONALLY — auto-chunked preview is always-on for them —
+   *  regardless of the global switch. Small docs keep the existing opt-in.
    *  Chunking is auxiliary — failures never fail the conversion. */
-  const attachChunks = useCallback(async (view: JobView) => {
-    if (!view.markdown) return;
-    // Huge outputs render raw-only and hide the chunking switch — computing
-    // chunks for them would be wasted work that's never shown.
-    if (view.markdown.length > 1_000_000) return;
-    const settings = chunkSettingsRef.current;
-    if (!settings?.enabled) return;
-    const options = resolveChunkOptions({
-      preset: settings.preset,
-      customTokens: Number(settings.customTokens) || undefined,
-      overlapAuto: settings.overlapAuto,
-      overlapTokens: Number(settings.overlapTokens) || undefined,
-    });
-    try {
-      const result = await chunkMarkdownAsync(view.markdown, options);
-      setJob(view.id, { chunks: result.chunks, chunkEncoding: result.encoding });
-    } catch {
-      // chunking is a bonus — the conversion stands on its own
-    }
-  }, [setJob]);
+  const computeChunks = useCallback(
+    async (view: JobView, force = false) => {
+      if (!view.markdown) return;
+      const settings = chunkSettingsRef.current;
+      const huge = view.markdown.length > HUGE_MD_CHARS;
+      if (!settings.enabled && !huge) return; // small docs: opt-in only
+      if (view.chunksStatus === "running") return; // dedupe concurrent runs
+      if (view.chunks && !force) {
+        // already chunked (e.g. a restored huge job) — just settle the status
+        setJob(view.id, { chunksStatus: "done" });
+        return;
+      }
+      const options = resolveChunkOptions({
+        preset: settings.preset,
+        customTokens: Number(settings.customTokens) || undefined,
+        overlapAuto: settings.overlapAuto,
+        overlapTokens: Number(settings.overlapTokens) || undefined,
+      });
+      // Synchronous before the await — the ingot's loading card renders first.
+      setJob(view.id, { chunksStatus: "running" });
+      if (huge) announce("Chunking large document…");
+      try {
+        const result = await chunkMarkdownAsync(view.markdown, options); // worker > 1MB
+        setJob(view.id, {
+          chunks: result.chunks,
+          chunkEncoding: result.encoding,
+          chunksStatus: "done",
+        });
+        // Only announce the count when this job is what the user is reading.
+        if (view.id === selectedIdRef.current)
+          announce(`Preview ready — ${result.chunks.length} chunks.`);
+      } catch {
+        setJob(view.id, { chunksStatus: "error" });
+        announce("Chunking failed — the raw view is still available.");
+      }
+    },
+    [setJob],
+  );
 
   const setChunkSettings = useCallback(
     (next: ChunkSettings) => {
       setChunkSettingsState(next);
       chunkSettingsRef.current = next;
-      if (!next.enabled) return;
-      // Re-chunk the selected done job from its in-memory markdown (cheap).
+      // Re-chunk the selected done job when it will be shown chunked
+      // (switch on, or huge where auto-chunk is locked on).
       const selected = jobsRef.current.find((j) => j.id === selectedIdRef.current);
-      if (selected?.markdown) void attachChunks(selected);
+      if (selected?.markdown && (next.enabled || selected.markdown.length > HUGE_MD_CHARS))
+        void computeChunks(selected, /* force */ true);
     },
-    [attachChunks],
+    [computeChunks],
   );
 
-  /** Select a job — and keep the global "Chunking on" switch honest: the
-   *  selected job is chunked on the spot if it isn't already, so the Flow B
-   *  preview never shows an on-switch with no chunks (F1). Accepts null to
-   *  clear the selection (Esc). */
-  const selectJob = useCallback(
-    (id: string | null) => {
-      setSelectedId(id);
-      if (!id) return;
-      const settings = chunkSettingsRef.current;
-      if (!settings?.enabled) return;
-      const job = jobsRef.current.find((j) => j.id === id);
-      if (job?.markdown && !job.chunks) void attachChunks(job);
-    },
-    [attachChunks],
-  );
+  // Keep the selected job's chunking honest from ANY selection path (click,
+  // keyboard, restore, auto-select-on-done): a huge doc, or a small doc with
+  // the global switch on, gets chunks computed on the spot.
+  useEffect(() => {
+    const id = selectedId;
+    if (!id) return;
+    const job = jobsRef.current.find((j) => j.id === id);
+    if (!job?.markdown || job.chunks) return;
+    const settings = chunkSettingsRef.current;
+    const huge = job.markdown.length > HUGE_MD_CHARS;
+    if (!settings.enabled && !huge) return;
+    void computeChunks(job);
+  }, [selectedId, computeChunks]);
 
   /** Load the engine on demand. Safe to call concurrently (pool dedupes).
    *  The engine state is ALWAYS derived from the pool — a cached 'ready'
@@ -225,7 +249,7 @@ export function useConverter() {
         };
         setJob(view.id, updated);
         persistDone(updated);
-        void attachChunks(updated);
+        void computeChunks(updated);
         setSelectedId((s) => s ?? view.id);
         return;
       }
@@ -269,7 +293,7 @@ export function useConverter() {
         };
         setJob(view.id, updated);
         persistDone(updated);
-        void attachChunks(updated);
+        void computeChunks(updated);
         setSelectedId((s) => s ?? view.id);
       } else {
         setJob(view.id, { status: "failed", code: res.code, message: res.message });
@@ -286,7 +310,7 @@ export function useConverter() {
         });
       }
     }
-  }, [attachChunks, ensureEngine, setJob]);
+  }, [computeChunks, ensureEngine, setJob]);
 
   const addFiles = useCallback(
     (files: File[], meta?: { folders?: number; foldersUnsupported?: boolean }) => {
@@ -551,7 +575,7 @@ export function useConverter() {
     toggleCheck, clearChecked,
     restoreHistory, dismissHistory, clearHistoryStore,
     downloadMarkdown, downloadZip, downloadChunksZip,
-    cancelExport, select: selectJob,
+    cancelExport, select: setSelectedId,
     activeCount,
   };
 }

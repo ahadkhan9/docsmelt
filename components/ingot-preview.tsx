@@ -15,9 +15,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChunkSettingsStrip } from "./chunk-settings";
-import { MarkdownView } from "./markdown";
 import { DocumentPreview } from "./document-preview";
 import { announce } from "@/lib/announce";
+import { HUGE_MD_CHARS, RAW_PREVIEW_CHARS, MAX_TEXT_NODE_CHARS, segmentText } from "@/lib/converter/preview";
 import { refine, type ErrorKind } from "@/lib/converter/errors";
 import { FAMILY_OF, FAMILY_TOKEN, FamilyGlyph, supportsZip } from "@/lib/converter/formats";
 import type { ChunkSettings, JobView } from "@/lib/converter/useConverter";
@@ -89,13 +89,21 @@ export function IngotPreview({
     job.status === "queued" || job.status === "detecting" || job.status === "smelting" ||
     job.status === "packing";
   // Large markdown would freeze react-markdown's synchronous parse on the
-  // main thread — show raw text instead (the .md download has it all).
-  const huge = (job.markdown?.length ?? 0) > 1_000_000;
+  // main thread — huge docs are AUTO-CHUNKED and previewed as bounded chunk
+  // blocks instead of a raw wall (chunking is locked on for them).
+  const huge = (job.markdown?.length ?? 0) > HUGE_MD_CHARS;
   const empty = job.status === "done" && (job.chars ?? 0) === 0;
   const error =
     job.status === "failed"
       ? refine(job.file.name, job.format, (job.code ?? "engine") as ErrorKind)
       : null;
+  // Auto-chunked preview is pending while the worker runs and no chunks exist.
+  const chunkingLarge =
+    huge &&
+    job.chunksStatus !== "done" &&
+    !(job.chunks && job.chunks.length > 0);
+  // In-place re-chunk of an already-chunked huge doc (settings probe).
+  const chunking = huge && job.chunksStatus === "running";
 
   return (
     <div className="flex h-[60dvh] min-h-[480px] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[var(--ingot-h,600px)] lg:max-h-[85dvh]">
@@ -130,33 +138,37 @@ export function IngotPreview({
         </div>
         {job.markdown && (
           <>
-            {!huge && (
-              <div
-                className="flex rounded-lg border border-border bg-background p-0.5"
-                role="tablist"
-                aria-label="Preview mode"
-                onKeyDown={onTabsKeyDown}
-              >
-                {(["rendered", "raw"] as const).map((t) => (
-                  <button
-                    key={t}
-                    id={t === "rendered" ? "preview-tab-rendered" : "preview-tab-raw"}
-                    role="tab"
-                    aria-selected={tab === t}
-                    aria-controls="preview-panel"
-                    tabIndex={tab === t ? 0 : -1}
-                    onClick={() => setTab(t)}
-                    className={cn(
-                      "min-h-10 rounded-md px-3 font-mono text-[11px] uppercase tracking-wide transition-colors duration-150",
-                      tab === t ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            )}
-            {!huge && (
+            <div
+              className="flex rounded-lg border border-border bg-background p-0.5"
+              role="tablist"
+              aria-label="Preview mode"
+              onKeyDown={onTabsKeyDown}
+            >
+              {(["rendered", "raw"] as const).map((t) => (
+                <button
+                  key={t}
+                  id={t === "rendered" ? "preview-tab-rendered" : "preview-tab-raw"}
+                  role="tab"
+                  aria-selected={tab === t}
+                  aria-controls="preview-panel"
+                  tabIndex={tab === t ? 0 : -1}
+                  onClick={() => {
+                    setTab(t);
+                    if (t === "raw" && huge)
+                      announce(
+                        `Large output — showing the first ${RAW_PREVIEW_CHARS.toLocaleString()} characters. Download the .md for the full file.`,
+                      );
+                  }}
+                  className={cn(
+                    "min-h-10 rounded-md px-3 font-mono text-[11px] uppercase tracking-wide transition-colors duration-150",
+                    tab === t ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            {!huge ? (
               <button
                 role="switch"
                 aria-checked={chunkSettings.enabled}
@@ -171,13 +183,19 @@ export function IngotPreview({
               >
                 Chunking {chunkSettings.enabled ? "on" : "off"}
               </button>
+            ) : (
+              /* huge docs: chunking is locked on — a static status stamp */
+              <span className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-molten bg-molten/10 px-3 font-mono text-[11px] uppercase tracking-wide text-molten">
+                <span aria-hidden className="size-1.5 rounded-full bg-molten" />
+                Auto-chunked
+              </span>
             )}
-            {chunkSettings.enabled && (
+            {(chunkSettings.enabled || huge) && (
               <Button
                 variant="ghost"
                 size="icon-lg"
                 className="min-h-11 min-w-11"
-                aria-label="Edit chunk settings"
+                aria-label={huge ? "Edit chunk settings — auto-chunking is on" : "Edit chunk settings"}
                 title="Edit chunk settings"
                 aria-expanded={settingsOpen}
                 onClick={() => setSettingsOpen((open) => !open)}
@@ -221,7 +239,7 @@ export function IngotPreview({
         )}
       </div>
 
-      {chunkSettings.enabled && settingsOpen && (
+      {(chunkSettings.enabled || huge) && settingsOpen && (
         <ChunkSettingsStrip
           settings={chunkSettings}
           onChange={onChunkSettings}
@@ -236,45 +254,77 @@ export function IngotPreview({
           role="tabpanel"
           id="preview-panel"
           aria-labelledby={tab === "rendered" ? "preview-tab-rendered" : "preview-tab-raw"}
+          aria-busy={huge && job.chunksStatus === "running" ? true : undefined}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
           className="min-h-0 flex-1 overflow-hidden"
         >
-          {huge ? (
-            <div className="h-full overflow-y-auto scroll-thin scroll-thin-on-paper [scrollbar-gutter:stable] bg-paper text-paper-foreground">
-              <div className="mx-auto max-w-4xl px-5 py-8 sm:px-8">
-                <p className="mb-4 rounded-lg border border-dashed border-paper-line bg-paper-chip px-3 py-2 font-mono text-xs text-paper-muted">
-                  Large output — shown as raw text. Download the .md for the full file.
-                </p>
-                <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed">
-                  {job.markdown}
-                </pre>
-              </div>
-            </div>
-          ) : empty ? (
+          {empty ? (
             <div className="flex h-full items-center justify-center bg-paper">
               <p className="font-mono text-sm text-paper-muted">
                 No text content was extracted.
               </p>
             </div>
+          ) : tab === "rendered" && chunkingLarge ? (
+            job.chunksStatus === "error" ? (
+              <div
+                role="alert"
+                className="flex h-full flex-col items-center justify-center gap-4 bg-paper px-6"
+              >
+                <CircleAlert className="size-9 text-fam-pdf" aria-hidden />
+                <div className="text-center">
+                  <h2 className="text-base font-semibold text-paper-foreground">Chunking failed</h2>
+                  <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-paper-muted">
+                    Couldn&apos;t split this large document into chunks. The raw text and the .md
+                    download still work.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="secondary" className="min-h-11" onClick={() => setTab("raw")}>
+                    Show raw
+                  </Button>
+                  <Button variant="ghost" className="min-h-11" onClick={() => onDownloadMd(job.id)}>
+                    Download .md
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-4 bg-paper">
+                <div
+                  className="h-1 w-40 overflow-hidden rounded-full bg-paper-line"
+                  role="progressbar"
+                  aria-label="Chunking"
+                  aria-valuetext="chunking — working"
+                >
+                  <div className="h-full w-1/3 rounded-full bg-molten animate-shimmer" />
+                </div>
+                <p className="font-mono text-xs uppercase tracking-widest text-paper-muted">
+                  chunking…
+                </p>
+                <p className="max-w-sm text-center font-mono text-xs leading-relaxed text-paper-muted">
+                  Splitting the document into token-bounded chunks — headings, tables, and code
+                  fences stay intact.
+                </p>
+              </div>
+            )
           ) : tab === "rendered" ? (
             <DocumentPreview
               markdown={job.markdown}
               chunks={job.chunks ?? null}
+              huge={huge}
+              chunking={chunking}
               stem={job.file.name.replace(/\.[^.]+$/, "") || "document"}
               tokenLabel={
                 job.chunkEncoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k tokens"
               }
             />
           ) : (
-            <div className="h-full overflow-y-auto scroll-thin scroll-thin-on-paper [scrollbar-gutter:stable] bg-paper text-paper-foreground">
-              <div className="mx-auto max-w-4xl px-5 py-8 sm:px-8">
-                <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed">
-                  {job.markdown}
-                </pre>
-              </div>
-            </div>
+            <RawPreview
+              markdown={job.markdown}
+              truncated={huge}
+              onDownloadMd={() => onDownloadMd(job.id)}
+            />
           )}
         </motion.div>
       ) : error ? (
@@ -311,6 +361,60 @@ export function IngotPreview({
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Bounded raw tab. Never mounts a giant text node: content is split into
+ * MAX_TEXT_NODE_CHARS segments, each with [content-visibility:auto] so only
+ * in-fold segments lay out. Huge docs are capped at RAW_PREVIEW_CHARS with an
+ * honest note + a real .md download button. Segments stack flush (my-0) so
+ * the raw wall reads as ONE continuous surface. Applies to ALL docs — a
+ * 900k non-huge raw view is segmented too.
+ */
+function RawPreview({
+  markdown,
+  truncated,
+  onDownloadMd,
+}: {
+  markdown: string;
+  truncated: boolean;
+  onDownloadMd: () => void;
+}) {
+  // Line-seam cut so the preview never starts mid-line.
+  const cut = truncated ? markdown.lastIndexOf("\n", RAW_PREVIEW_CHARS) : markdown.length;
+  const shown = truncated ? markdown.slice(0, cut > 0 ? cut : RAW_PREVIEW_CHARS) : markdown;
+  const segs = segmentText(shown, MAX_TEXT_NODE_CHARS);
+  return (
+    <div className="h-full overflow-y-auto scroll-thin scroll-thin-on-paper [scrollbar-gutter:stable] bg-paper text-paper-foreground">
+      <div className="mx-auto max-w-4xl px-5 py-8 sm:px-8">
+        {truncated && (
+          <p
+            role="note"
+            className="mb-4 rounded-lg border border-dashed border-paper-line bg-paper-chip px-3 py-2 font-mono text-xs leading-relaxed text-paper-muted"
+          >
+            Large output — showing the first {shown.length.toLocaleString()} of{" "}
+            {markdown.length.toLocaleString()} characters.{" "}
+            <button
+              type="button"
+              onClick={onDownloadMd}
+              className="underline underline-offset-2 hover:text-paper-foreground"
+            >
+              Download the .md
+            </button>{" "}
+            for the full file.
+          </p>
+        )}
+        {segs.map((s, i) => (
+          <pre
+            key={i}
+            className="my-0 whitespace-pre-wrap font-mono text-[13px] leading-relaxed [content-visibility:auto] [contain-intrinsic-size:auto_8000px]"
+          >
+            {s}
+          </pre>
+        ))}
+      </div>
     </div>
   );
 }

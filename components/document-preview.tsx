@@ -5,8 +5,9 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { MobilePreview } from "./mobile-preview";
 import { ChunkBlock, SectionBlock } from "./preview-blocks";
 import { MarkdownView } from "./markdown";
+import { useChunkPager } from "./progressive-chunks";
 import { chunkSummary, type RagChunk } from "@/lib/converter/chunk";
-import { parseSections, sectionForHeading } from "@/lib/converter/sections";
+import { outlineFromChunkMetas, parseSections, sectionForHeading } from "@/lib/converter/sections";
 import { cn } from "@/lib/utils";
 
 const supportsScrollDriven =
@@ -24,15 +25,28 @@ const supportsScrollDriven =
 export function DocumentPreview({
   markdown,
   chunks,
+  huge = false,
+  chunking = false,
   stem,
   tokenLabel = "cl100k tokens",
 }: {
   markdown: string;
   chunks?: RagChunk[] | null;
+  /** Huge (>1M chars) doc — chunked preview, outline from chunk metas. */
+  huge?: boolean;
+  /** In-place re-chunk in progress (non-blocking). */
+  chunking?: boolean;
   stem: string;
   tokenLabel?: string;
 }) {
-  const outline = useMemo(() => parseSections(markdown), [markdown]);
+  // parseSections NEVER scans a huge doc — the outline comes from chunk metas.
+  const outline = useMemo(
+    () =>
+      huge
+        ? outlineFromChunkMetas(chunks?.map((c) => c.meta.headingPath) ?? [])
+        : parseSections(markdown),
+    [markdown, chunks, huge],
+  );
   const summary = useMemo(() => (chunks ? chunkSummary(chunks) : null), [chunks]);
   const paneRef = useRef<HTMLDivElement>(null);
   const railRef = useRef<HTMLUListElement>(null);
@@ -71,6 +85,9 @@ export function DocumentPreview({
   }, [collapsed]);
 
   const chunkMode = Boolean(chunks && chunks.length > 0);
+
+  // Progressive chunk mounting for huge docs (mount a batch, +batch on scroll).
+  const pager = useChunkPager(chunks, huge && chunkMode, paneRef);
 
   // Phones get the dedicated component (fixed Contents button + TOC
   // drawer); the desktop navigated preview below is untouched.
@@ -115,7 +132,7 @@ export function DocumentPreview({
     );
     targets.forEach((t) => observer.observe(t));
     return () => observer.disconnect();
-  }, [outline, chunks]);
+  }, [outline, chunks, pager.limit]);
 
   // Progress rail: CSS scroll-driven where supported, transform-only JS.
   useEffect(() => {
@@ -138,12 +155,21 @@ export function DocumentPreview({
     };
   }, []);
 
-  const jumpTo = useCallback((selector: string) => {
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    paneRef.current
-      ?.querySelector(selector)
-      ?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
-  }, []);
+  const jumpTo = useCallback(
+    (selector: string) => {
+      // Chunk jumps on a huge doc first mount up to the target (progressive).
+      const m = selector.match(/^\[data-chunk="(\d+)"\]$/);
+      if (m) {
+        pager.reveal(Number(m[1]));
+        return;
+      }
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      paneRef.current
+        ?.querySelector(selector)
+        ?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+    },
+    [pager.reveal, paneRef],
+  );
 
   const onRailKeyDown = (event: React.KeyboardEvent) => {
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
@@ -159,6 +185,8 @@ export function DocumentPreview({
       <MobilePreview
         markdown={markdown}
         chunks={chunks}
+        huge={huge}
+        chunking={chunking}
         stem={stem}
         tokenLabel={tokenLabel}
       />
@@ -285,6 +313,14 @@ export function DocumentPreview({
           <div className="mx-auto max-w-4xl px-5 py-8 sm:px-8">
             {chunkMode && chunks ? (
               <>
+                {chunking && (
+                  <p
+                    role="status"
+                    className="mb-2 font-mono text-[11px] uppercase tracking-widest text-paper-muted"
+                  >
+                    re-chunking…
+                  </p>
+                )}
                 {summary && (
                   <p className="mb-4 font-mono text-[11px] text-paper-muted">
                     {summary.count} chunks · ~{summary.avgTokens} {tokenLabel} avg
@@ -294,9 +330,35 @@ export function DocumentPreview({
                     {summary.oversized > 0 ? ` · ${summary.oversized} oversized` : ""}
                   </p>
                 )}
-                {chunks.map((chunk) => (
-                  <ChunkBlock key={chunk.index} chunk={chunk} stem={stem} tokenLabel={tokenLabel} />
+                {chunks.slice(0, pager.limit).map((chunk, i) => (
+                  <ChunkBlock
+                    key={chunk.index}
+                    chunk={chunk}
+                    stem={stem}
+                    tokenLabel={tokenLabel}
+                    showHeading={
+                      i === 0 ||
+                      chunk.meta.headingPath[chunk.meta.headingPath.length - 1] !==
+                        (chunks[i - 1]?.meta.headingPath[chunks[i - 1].meta.headingPath.length - 1] ??
+                          "")
+                    }
+                  />
                 ))}
+                {pager.limit < chunks.length && (
+                  <>
+                    <div ref={pager.sentinelRef} aria-hidden className="h-px" />
+                    <p aria-live="polite" className="mt-2 font-mono text-[11px] text-paper-muted">
+                      Loaded {pager.loadedLabel} chunks — scroll for more.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={pager.loadMore}
+                      className="mt-4 min-h-11 w-full rounded-lg border border-dashed border-paper-line bg-paper-chip px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-paper-muted hover:text-paper-foreground"
+                    >
+                      Load more chunks ({pager.loadedLabel})
+                    </button>
+                  </>
+                )}
               </>
             ) : (
               <>
