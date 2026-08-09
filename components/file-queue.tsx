@@ -268,7 +268,7 @@ function QueueRow({
     if (!chunks?.length) return;
     const base = stemOf(job.file.name);
     const label =
-      encoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k tokens";
+      encoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k_base tokens";
     const options = resolveChunkOptions({
       preset: chunkSize,
       customTokens: Number(customTokens) || undefined,
@@ -279,7 +279,7 @@ function QueueRow({
     downloadBlob(blob, `${base}-chunks.zip`);
   };
   const tokenLabel =
-    encoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k tokens";
+    encoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k_base tokens";
   const active = ACTIVE.has(job.status);
   const elapsed = Math.max(0, Math.round((now - job.startedAt) / 1000));
   const error =

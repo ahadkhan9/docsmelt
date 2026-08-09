@@ -195,7 +195,7 @@ export function FurnaceDropzone({
         </h1>
         <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-steel">
           21 formats — PDF, DOCX, XLSX, PPTX, RTF, EPUB, ODS, CSV and more —
-          converted in your browser. Nothing is uploaded, so nothing can leak.
+          converted in your browser.
         </p>
         <div className="mt-8 flex items-center gap-2" aria-hidden>
           {FAMILIES.map((family) => (

@@ -261,6 +261,15 @@ export default function ConverterApp() {
                   </>
                 )}
               </p>
+              <p>
+                Built by <span translate="no">Ahad Khan</span> ·{" "}
+                <a
+                  href="https://ahad.works"
+                  className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                >
+                  ahad.works
+                </a>
+              </p>
             </div>
           </div>
         </footer>
