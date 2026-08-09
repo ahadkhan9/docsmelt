@@ -93,8 +93,9 @@ export function parseSections(markdown: string): DocOutline {
     }
   }
   flush();
-  // No headings at all: the whole document is one level-0 section.
-  if (sections.length === 0 && preambleLines.length > 0) {
+  // No headings at all: the whole document is one level-0 section
+  // (only when it has real content — a blank doc yields no sections).
+  if (sections.length === 0 && preambleLines.some((l) => l.trim() !== "")) {
     sections.push({
       id: uniqueId("document"),
       level: 0,
