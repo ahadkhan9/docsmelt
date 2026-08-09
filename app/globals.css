@@ -1,0 +1,198 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  /* Design-system extras — docs/design-direction.md §3 */
+  --color-steel: var(--steel);
+  --color-molten: var(--molten);
+  --color-paper: var(--paper);
+  --color-paper-foreground: var(--paper-foreground);
+  --color-paper-muted: var(--paper-muted);
+  --color-paper-line: var(--paper-line);
+  --color-link: var(--link);
+  --color-fam-word: var(--fam-word);
+  --color-fam-pdf: var(--fam-pdf);
+  --color-fam-sheet: var(--fam-sheet);
+  --color-fam-slide: var(--fam-slide);
+  --color-fam-book: var(--fam-book);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+ * The Foundry — dark-only palette (design direction §3).
+ * Values are hex for exactness; app is dark-first by design.
+ */
+:root {
+  color-scheme: dark;
+  --background: #101418;
+  --foreground: #e8ecf1;
+  --card: #171c22;
+  --card-foreground: #e8ecf1;
+  --popover: #171c22;
+  --popover-foreground: #e8ecf1;
+  --primary: #ff9e3d; /* molten — the one interaction accent */
+  --primary-foreground: #261503;
+  --secondary: #1f2731;
+  --secondary-foreground: #e8ecf1;
+  --muted: #1b222b;
+  --muted-foreground: #7a8794;
+  --accent: #1f2731;
+  --accent-foreground: #e8ecf1;
+  --destructive: #f08a7c;
+  --destructive-foreground: #2b0e0a;
+  --border: #28313c;
+  --input: #2a333f;
+  --ring: #ff9e3d;
+  --radius: 0.75rem;
+  --chart-1: #ff9e3d;
+  --chart-2: #7fa8f0;
+  --chart-3: #86cc8e;
+  --chart-4: #b7a0f0;
+  --chart-5: #6cc8ce;
+  --sidebar: #14181e;
+  --sidebar-foreground: #e8ecf1;
+  --sidebar-primary: #ff9e3d;
+  --sidebar-primary-foreground: #261503;
+  --sidebar-accent: #1f2731;
+  --sidebar-accent-foreground: #e8ecf1;
+  --sidebar-border: #28313c;
+  --sidebar-ring: #ff9e3d;
+  /* Extras */
+  --steel: #9aa7b5;
+  --molten: #ff9e3d;
+  --paper: #f7f7f5; /* the ingot — markdown surface */
+  --paper-foreground: #1f2328;
+  --paper-muted: #59616c;
+  --paper-line: #d9dee1;
+  --link: #2e5ba8;
+  --fam-word: #7fa8f0;
+  --fam-pdf: #f08a7c;
+  --fam-sheet: #86cc8e;
+  --fam-slide: #b7a0f0;
+  --fam-book: #6cc8ce;
+}
+
+/* The .dark block exists for shadcn's variant system; the app is dark-only,
+   so :root above IS the dark theme. Keeping the block avoids broken tokens
+   if `.dark` ever gets applied by a future theme toggle. */
+.dark {
+  --background: #101418;
+  --foreground: #e8ecf1;
+  --card: #171c22;
+  --card-foreground: #e8ecf1;
+  --popover: #171c22;
+  --popover-foreground: #e8ecf1;
+  --primary: #ff9e3d;
+  --primary-foreground: #261503;
+  --secondary: #1f2731;
+  --secondary-foreground: #e8ecf1;
+  --muted: #1b222b;
+  --muted-foreground: #7a8794;
+  --accent: #1f2731;
+  --accent-foreground: #e8ecf1;
+  --destructive: #f08a7c;
+  --destructive-foreground: #2b0e0a;
+  --border: #28313c;
+  --input: #2a333f;
+  --ring: #ff9e3d;
+  --sidebar: #14181e;
+  --sidebar-foreground: #e8ecf1;
+  --sidebar-primary: #ff9e3d;
+  --sidebar-primary-foreground: #261503;
+  --sidebar-accent: #1f2731;
+  --sidebar-accent-foreground: #e8ecf1;
+  --sidebar-border: #28313c;
+  --sidebar-ring: #ff9e3d;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  /* Visible focus for custom interactive elements (dropzone, rows).
+     shadcn controls carry their own ring classes. */
+  *:not([data-slot]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* The furnace shimmer — indeterminate progress (design direction §8). */
+@keyframes dm-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(400%);
+  }
+}
+
+.animate-shimmer {
+  animation: dm-shimmer 1.4s linear infinite;
+}
+
+/* Thin scrollbars for the queue and preview panes. */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
