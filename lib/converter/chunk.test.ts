@@ -505,3 +505,21 @@ describe("chunkMarkdownAsync — worker failure fallback (collapse-bug recreatio
     expect(result.chunks[0].content).toContain("x");
   });
 });
+
+describe("chunkMarkdownAsync — special tokens in document text (the 10MB PDF repro)", () => {
+  it("chunks markdown containing reserved special tokens without throwing", async () => {
+    const md = [
+      "# Prompts",
+      "",
+      "The chat format uses <|im_start|> and <|im_end|> markers, with <|noise|> for degradation.",
+      "",
+      "filler ".repeat(300),
+    ].join("\n");
+    const result = await chunkMarkdownAsync(md, { targetTokens: 200 });
+    expect(result.chunks.length).toBeGreaterThan(0);
+    const all = result.chunks.map((c) => c.content).join("\n");
+    expect(all).toContain("<|im_start|>");
+    expect(all).toContain("<|im_end|>");
+    expect(all).toContain("<|noise|>");
+  });
+});

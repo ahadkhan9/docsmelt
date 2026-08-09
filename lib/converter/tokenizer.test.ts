@@ -35,3 +35,14 @@ describe("createFallbackTokenizer (honest degrade)", () => {
     expect(fallback.withinLimit("x".repeat(3000), 512)).toBe(false);
   });
 });
+
+describe("special tokens in real documents (the 10MB PDF bug)", () => {
+  it("counts text containing reserved special tokens instead of throwing", async () => {
+    const tok = await loadTokenizer();
+    // Books about LLM prompts literally contain these (reproduced from a
+    // real 10 MB PDF): the default would throw 'Disallowed special token'.
+    const md = "System: <|im_start|> assistant <|im_end|> <|noise|> tokens.";
+    expect(tok.count(md)).toBeGreaterThan(0);
+    expect(tok.withinLimit(md, 512)).toBe(true);
+  });
+});

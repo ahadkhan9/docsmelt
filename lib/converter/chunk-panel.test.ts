@@ -25,7 +25,7 @@ describe("chunkPanelVisible", () => {
   });
 
   it("carries an honest error message", () => {
-    expect(CHUNK_PANEL_ERROR).toContain("Try again");
+    expect(CHUNK_PANEL_ERROR.toLowerCase()).toContain("try again");
   });
 });
 

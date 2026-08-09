@@ -38,9 +38,17 @@ export function loadTokenizer(): Promise<Tokenizer> {
     .then(
       (gpt): Tokenizer => ({
         // gpt-tokenizer's default encoding is cl100k_base (GPT-4-class).
-        count: (text) => gpt.countTokens(text),
+        // allowedSpecial: real documents can literally contain the reserved
+        // tokens (<|im_start|>, <|im_end|>, <|noise|> … — e.g. books about
+        // LLM prompts) and the default THROWS on them ('Disallowed special
+        // token found'), which surfaced as a bogus 'tokenizer failed' on a
+        // 10 MB AI-agents PDF. Counting them as their token IDs is the
+        // correct behavior.
+        count: (text) => gpt.countTokens(text, { allowedSpecial: gpt.ALL_SPECIAL_TOKENS }),
         withinLimit: (text, limit) => {
-          const result = gpt.isWithinTokenLimit(text, limit);
+          const result = gpt.isWithinTokenLimit(text, limit, {
+            allowedSpecial: gpt.ALL_SPECIAL_TOKENS,
+          });
           if (typeof result === "number") return result <= limit;
           return result;
         },
