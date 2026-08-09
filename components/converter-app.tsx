@@ -12,10 +12,13 @@ import { useConverter } from "@/lib/converter/useConverter";
 import { FurnaceDropzone } from "./furnace-dropzone";
 import { FileQueue } from "./file-queue";
 import { IngotPreview } from "./ingot-preview";
-
-const FORMATS =
-  "doc · docx · docm · odt · rtf · pdf · xls · xlsx · xlsm · xlsb · ods · csv · " +
-  "ppt · pps · pot · pptx · pptm · ppsx · ppsm · odp · epub";
+import {
+  PreviewResizeHandle,
+  QUEUE_W_DEFAULT,
+  QUEUE_W_MIN,
+  QUEUE_W_MAX,
+  INGOT_H_DEFAULT,
+} from "./preview-resize-handle";
 
 /** Best-effort global paste (⌘⇧V): read the clipboard, hand files to the app.
  *  Fails silently when permission is denied — the dropzone paste hint stays. */
@@ -40,6 +43,36 @@ async function pasteFromClipboard(addFiles: (files: File[]) => void): Promise<vo
 export default function ConverterApp() {
   const c = useConverter();
   const hasJobs = c.jobs.length > 0;
+
+  // Workspace split: the queue column width is user-adjustable and persists;
+  // the preview height resets to the default each load — a desktop-tuned px
+  // height must never leak onto a phone (the grid is single-column below lg
+  // and lg:h-[var(--ingot-h)] never applies there). The persisted width is
+  // applied AFTER mount so SSR and the hydrated client always agree.
+  const [queueW, setQueueW] = useState(QUEUE_W_DEFAULT);
+  const [ingotH, setIngotH] = useState(INGOT_H_DEFAULT);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    try {
+      const w = Number(localStorage.getItem("dm-queue-w"));
+      if (mounted && Number.isFinite(w)) {
+        setQueueW(Math.min(QUEUE_W_MAX, Math.max(QUEUE_W_MIN, w)));
+      }
+    } catch {
+      // privacy mode — layout preference just doesn't persist
+    }
+    return () => {
+      mounted = false;
+    };
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem("dm-queue-w", String(queueW));
+    } catch {
+      // privacy mode — layout preference just doesn't persist
+    }
+  }, [queueW]);
 
   // Screen-reader announcements on status flips (aria-live).
   const [announcement, setAnnouncement] = useState("");
@@ -241,7 +274,11 @@ export default function ConverterApp() {
                   </button>
                 </div>
               )}
-              <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
+              <div
+                ref={gridRef}
+                className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[var(--queue-w,340px)_minmax(0,1fr)]"
+                style={{ "--queue-w": `${queueW}px` } as React.CSSProperties}
+              >
                 <FileQueue
                   jobs={c.jobs}
                   now={c.now}
@@ -263,16 +300,28 @@ export default function ConverterApp() {
                   onCancelExport={c.cancelExport}
                   exporting={c.exporting}
                 />
-                <IngotPreview
-                  job={c.selected}
-                  chunkSettings={c.chunkSettings}
-                  onChunkSettings={c.setChunkSettings}
-                  onDownloadMd={c.downloadMarkdown}
-                  onDownloadZip={c.downloadZip}
-                  onDownloadChunksZip={c.downloadChunksZip}
-                  onRetry={c.retry}
-                  onRemove={c.remove}
-                />
+                <div
+                  className="relative min-w-0"
+                  style={{ "--ingot-h": `${ingotH}px` } as React.CSSProperties}
+                >
+                  <IngotPreview
+                    job={c.selected}
+                    chunkSettings={c.chunkSettings}
+                    onChunkSettings={c.setChunkSettings}
+                    onDownloadMd={c.downloadMarkdown}
+                    onDownloadZip={c.downloadZip}
+                    onDownloadChunksZip={c.downloadChunksZip}
+                    onRetry={c.retry}
+                    onRemove={c.remove}
+                  />
+                  <PreviewResizeHandle
+                    gridRef={gridRef}
+                    queueW={queueW}
+                    setQueueW={setQueueW}
+                    ingotH={ingotH}
+                    setIngotH={setIngotH}
+                  />
+                </div>
               </div>
             </div>
           ) : (
@@ -281,56 +330,42 @@ export default function ConverterApp() {
         </main>
 
         <footer className="border-t border-border/60">
-          <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-8 sm:px-6 md:flex-row md:items-end md:justify-between">
-            <div className="min-w-0">
-              <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                Formats
-              </p>
-              <p className="mt-2 max-w-2xl font-mono text-[11px] leading-relaxed text-muted-foreground text-pretty">
-                {FORMATS}
-              </p>
-              <p className="mt-1.5 font-mono text-[11px] text-muted-foreground">
-                Markdown and plain text pass through unchanged — no conversion needed.
-              </p>
-              <div className="shortcuts-hint mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 font-mono text-[11px] text-muted-foreground">
-                <span>
-                  <kbd className="kbd">⌘O</kbd> open
-                </span>
-                <span>
-                  <kbd className="kbd">⌘⇧V</kbd> paste
-                </span>
-                <span>
-                  <kbd className="kbd">⌘D</kbd> download
-                </span>
-                <span>
-                  <kbd className="kbd">Esc</kbd> cancel / clear
-                </span>
-                <span>
-                  <kbd className="kbd">1–9</kbd> select
-                </span>
-              </div>
+          <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5 sm:px-6 md:flex-row md:items-center md:justify-between">
+            <div className="shortcuts-hint flex flex-wrap items-center gap-x-4 gap-y-1.5 font-mono text-[11px] text-muted-foreground">
+              <span>
+                <kbd className="kbd">⌘O</kbd> open
+              </span>
+              <span>
+                <kbd className="kbd">⌘⇧V</kbd> paste
+              </span>
+              <span>
+                <kbd className="kbd">⌘D</kbd> download
+              </span>
+              <span>
+                <kbd className="kbd">Esc</kbd> cancel / clear
+              </span>
+              <span>
+                <kbd className="kbd">1–9</kbd> select
+              </span>
             </div>
-            <div className="font-mono text-[11px] leading-relaxed text-muted-foreground md:shrink-0 md:text-right">
-              <p>Engine: Firecrawl AnyDoc (MIT) · WebAssembly</p>
-              <p>No server · no uploads · no accounts</p>
-              <p className="mt-1.5">
-                <Link
-                  href="/benchmark"
-                  className="underline underline-offset-2 hover:text-foreground"
-                >
-                  Benchmarks
-                </Link>
-              </p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] leading-relaxed text-muted-foreground md:shrink-0 md:justify-end">
+              <span className="whitespace-nowrap">Engine: Firecrawl AnyDoc (MIT) · WebAssembly</span>
+              <span aria-hidden className="hidden text-border sm:inline">·</span>
+              <span className="hidden sm:inline">No server · no uploads · no accounts</span>
+              <Link
+                href="/benchmark"
+                className="rounded px-1 py-0.5 underline underline-offset-2 hover:text-foreground"
+              >
+                Benchmarks
+              </Link>
               {c.historyCount !== null && (
-                <p className="mt-1">
-                  <button
-                    type="button"
-                    className="underline underline-offset-2 hover:text-foreground"
-                    onClick={armClearHistory}
-                  >
-                    {clearArmed ? "Clear history? This can't be undone." : "Clear history"}
-                  </button>
-                </p>
+                <button
+                  type="button"
+                  className="rounded px-1 py-0.5 underline underline-offset-2 hover:text-foreground"
+                  onClick={armClearHistory}
+                >
+                  {clearArmed ? "Clear history? This can't be undone." : "Clear history"}
+                </button>
               )}
             </div>
           </div>

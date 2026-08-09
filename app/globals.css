@@ -192,10 +192,51 @@
   animation: dm-shimmer 1.4s linear infinite;
 }
 
-/* Thin scrollbars for the queue and preview panes. */
+/* Minimal scrollbars — dark surfaces (queue on card) use the base class;
+   paper surfaces (preview/raw panes, outline rail, markdown) add
+   .scroll-thin-on-paper. WebKit/Blink: 8px rail, 4px visible pill via the
+   transparent border (the full 8px rail stays the hit area). Firefox: native
+   `scrollbar-width: thin` with the same two-token colors. Existing tokens
+   only — no new hexes. */
 .scroll-thin {
+  --dm-scroll-thumb: var(--border);
+  --dm-scroll-thumb-hover: var(--steel);
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--dm-scroll-thumb) transparent;
+}
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background-color: var(--dm-scroll-thumb);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  min-height: 32px;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover,
+.scroll-thin::-webkit-scrollbar-thumb:active {
+  background-color: var(--dm-scroll-thumb-hover);
+}
+.scroll-thin::-webkit-scrollbar-corner {
+  background: transparent;
+}
+.scroll-thin-on-paper {
+  --dm-scroll-thumb: var(--paper-line);
+  --dm-scroll-thumb-hover: var(--paper-muted);
+}
+
+/* Corner-resize: kill text selection and keep the nwse cursor during the drag. */
+body.dm-resizing {
+  user-select: none;
+  cursor: nwse-resize;
+}
+body.dm-resizing * {
+  cursor: nwse-resize !important;
 }
 
 /* Keyboard-shortcut hint — keyboard-only by design, hidden on touch. */

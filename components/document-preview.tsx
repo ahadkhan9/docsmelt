@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { MobilePreview } from "./mobile-preview";
 import { ChunkBlock, SectionBlock } from "./preview-blocks";
 import { MarkdownView } from "./markdown";
@@ -38,6 +39,36 @@ export function DocumentPreview({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeChunk, setActiveChunk] = useState<number | null>(null);
   const [progress, setProgress] = useState(0);
+
+  // Desktop rail collapse. Persists across sessions (layout preference).
+  // The persisted value is applied AFTER mount so the server-rendered
+  // default and the hydrated client always agree (no hydration mismatch).
+  const [collapsed, setCollapsed] = useState(false);
+  const asideRef = useRef<HTMLElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    let mounted = true;
+    try {
+      if (mounted && localStorage.getItem("dm-outline-collapsed") === "1") setCollapsed(true);
+    } catch {
+      // privacy mode — layout preference just doesn't persist
+    }
+    return () => {
+      mounted = false;
+    };
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem("dm-outline-collapsed", collapsed ? "1" : "0");
+    } catch {
+      // privacy mode — layout preference just doesn't persist
+    }
+  }, [collapsed]);
+  // Don't strand keyboard focus inside the list that just got hidden.
+  useEffect(() => {
+    if (collapsed && asideRef.current?.contains(document.activeElement))
+      toggleRef.current?.focus();
+  }, [collapsed]);
 
   const chunkMode = Boolean(chunks && chunks.length > 0);
 
@@ -144,64 +175,112 @@ export function DocumentPreview({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="relative flex min-h-0 flex-1">
-        {/* left rail — outline (Flow A) or chunks (Flow B) */}
-        <aside className="hidden w-52 shrink-0 overflow-y-auto border-r border-paper-line bg-paper-chip p-3 scroll-thin md:block">
-          <p className="font-mono text-[11px] uppercase tracking-wider text-paper-muted">
-            {chunkMode ? "Chunks" : "Outline"}
-          </p>
-          {chunkMode && chunks ? (
-            <ul ref={railRef} onKeyDown={onRailKeyDown} className="mt-2 space-y-0.5">
-              {chunks.map((chunk) => (
-                <li key={chunk.index}>
-                  <button
-                    onClick={() => jumpTo(`[data-chunk="${chunk.index}"]`)}
-                    aria-current={activeChunk === chunk.index ? "true" : undefined}
-                    className={cn(
-                      "flex min-h-10 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-150",
-                      activeChunk === chunk.index
-                        ? "bg-paper-active font-medium text-paper-foreground"
-                        : "text-paper-muted hover:text-paper-foreground",
-                    )}
-                  >
-                    <span className="font-mono text-[11px] tabular-nums">
-                      {String(chunk.index).padStart(2, "0")}
-                    </span>
-                    <span className="truncate font-mono text-[11px]">{chunk.tokens}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <ul className="mt-2 space-y-0.5">
-              {outlineItems.map((section) => (
-                <li key={section.id}>
-                  <button
-                    onClick={() => jumpTo(`[data-section="${section.id}"]`)}
-                    aria-current={activeOutlineId === section.id ? "true" : undefined}
-                    className={cn(
-                      "min-h-10 w-full truncate rounded-md px-2 py-1.5 text-left transition-colors duration-150",
-                      section.level === 0 && "font-mono text-[11px]",
-                      activeOutlineId === section.id
-                        ? "bg-paper-active font-medium text-paper-foreground"
-                        : "text-paper-muted hover:text-paper-foreground",
-                    )}
-                    style={{
-                      paddingLeft: `${10 + (Math.min(section.level, 4) - 1) * 12}px`,
-                    }}
-                  >
-                    {section.level > 0 ? section.text : "preamble"}
-                  </button>
-                </li>
-              ))}
-            </ul>
+        {/* left rail — outline (Flow A) or chunks (Flow B), collapsible */}
+        <aside
+          ref={asideRef}
+          aria-label={chunkMode ? "Chunks" : "Outline"}
+          className={cn(
+            "hidden shrink-0 overflow-hidden border-r border-paper-line bg-paper-chip transition-[width] duration-200 ease-out md:flex md:flex-col",
+            collapsed ? "w-11 items-center" : "w-52",
           )}
+        >
+          <div
+            className={cn(
+              "flex w-full items-center",
+              collapsed ? "justify-center py-2" : "justify-between px-3 pt-3",
+            )}
+          >
+            {!collapsed && (
+              <p className="font-mono text-[11px] uppercase tracking-wider text-paper-muted">
+                {chunkMode ? "Chunks" : "Outline"}
+              </p>
+            )}
+            <button
+              ref={toggleRef}
+              type="button"
+              onClick={() => setCollapsed((v) => !v)}
+              aria-expanded={!collapsed}
+              aria-controls="outline-rail-list"
+              aria-label={collapsed ? "Expand outline" : "Collapse outline"}
+              title={collapsed ? "Expand outline" : "Collapse outline"}
+              className="flex size-10 shrink-0 items-center justify-center rounded-md text-paper-muted transition-colors duration-150 hover:bg-paper-active hover:text-paper-foreground"
+            >
+              {collapsed ? (
+                <PanelLeftOpen className="size-4" aria-hidden />
+              ) : (
+                <PanelLeftClose className="size-4" aria-hidden />
+              )}
+            </button>
+          </div>
+          {collapsed && (
+            <span
+              aria-hidden
+              className="pointer-events-none mt-3 font-mono text-[11px] uppercase tracking-widest text-paper-muted [writing-mode:vertical-rl]"
+            >
+              {chunkMode ? "Chunks" : "Outline"}
+            </span>
+          )}
+          <div
+            id="outline-rail-list"
+            className={cn(
+              "flex min-h-0 flex-1 flex-col overflow-y-auto scroll-thin scroll-thin-on-paper [scrollbar-gutter:stable]",
+              collapsed && "hidden",
+            )}
+          >
+            {chunkMode && chunks ? (
+              <ul ref={railRef} onKeyDown={onRailKeyDown} className="mt-2 space-y-0.5 px-3 pb-3">
+                {chunks.map((chunk) => (
+                  <li key={chunk.index}>
+                    <button
+                      onClick={() => jumpTo(`[data-chunk="${chunk.index}"]`)}
+                      aria-current={activeChunk === chunk.index ? "true" : undefined}
+                      className={cn(
+                        "flex min-h-10 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-150",
+                        activeChunk === chunk.index
+                          ? "bg-paper-active font-medium text-paper-foreground"
+                          : "text-paper-muted hover:text-paper-foreground",
+                      )}
+                    >
+                      <span className="font-mono text-[11px] tabular-nums">
+                        {String(chunk.index).padStart(2, "0")}
+                      </span>
+                      <span className="truncate font-mono text-[11px]">{chunk.tokens}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <ul className="mt-2 space-y-0.5 px-3 pb-3">
+                {outlineItems.map((section) => (
+                  <li key={section.id}>
+                    <button
+                      onClick={() => jumpTo(`[data-section="${section.id}"]`)}
+                      aria-current={activeOutlineId === section.id ? "true" : undefined}
+                      className={cn(
+                        "min-h-10 w-full truncate rounded-md px-2 py-1.5 text-left transition-colors duration-150",
+                        section.level === 0 && "font-mono text-[11px]",
+                        activeOutlineId === section.id
+                          ? "bg-paper-active font-medium text-paper-foreground"
+                          : "text-paper-muted hover:text-paper-foreground",
+                      )}
+                      style={{
+                        paddingLeft: `${10 + (Math.min(section.level, 4) - 1) * 12}px`,
+                      }}
+                    >
+                      {section.level > 0 ? section.text : "preamble"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </aside>
 
         <div className="flex min-h-0 flex-1 flex-col">
         {/* content scroller */}
         <div
           ref={paneRef}
-          className="scroll-pane relative flex-1 overflow-y-auto overscroll-contain scroll-thin bg-paper text-paper-foreground"
+          className="scroll-pane relative flex-1 overflow-y-auto overscroll-contain scroll-thin scroll-thin-on-paper [scrollbar-gutter:stable] bg-paper text-paper-foreground"
         >
           <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
             {chunkMode && chunks ? (

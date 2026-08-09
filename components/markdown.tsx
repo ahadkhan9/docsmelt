@@ -50,12 +50,12 @@ export function MarkdownView({ source, className }: { source: string; className?
             ),
           pre: ({ node: _n, ...p }) => (
             <pre
-              className="mb-4 overflow-x-auto rounded-lg border border-paper-line bg-paper-chip p-4 font-mono text-[13px] leading-relaxed scroll-thin"
+              className="mb-4 overflow-x-auto rounded-lg border border-paper-line bg-paper-chip p-4 font-mono text-[13px] leading-relaxed scroll-thin scroll-thin-on-paper"
               {...p}
             />
           ),
           table: ({ node: _n, ...p }) => (
-            <div className="mb-4 overflow-x-auto scroll-thin">
+            <div className="mb-4 overflow-x-auto scroll-thin scroll-thin-on-paper">
               <table className="w-full border-collapse text-sm" {...p} />
             </div>
           ),

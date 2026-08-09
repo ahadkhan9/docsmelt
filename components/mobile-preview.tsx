@@ -193,7 +193,7 @@ export function MobilePreview({
       {/* content scroller — plain, no sticky, no nested scroll containers */}
       <div
         ref={paneRef}
-        className="scroll-pane relative flex-1 touch-manipulation overflow-y-auto overscroll-contain scroll-thin bg-paper text-paper-foreground"
+        className="scroll-pane relative flex-1 touch-manipulation overflow-y-auto overscroll-contain scroll-thin scroll-thin-on-paper [scrollbar-gutter:stable] bg-paper text-paper-foreground"
       >
         <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
           {chunkMode && chunks ? (
@@ -294,7 +294,7 @@ export function MobilePreview({
                   <X className="size-4" />
                 </button>
               </div>
-              <ul ref={listRef} onKeyDown={onListKeyDown} className="max-h-[calc(75dvh-3.5rem)] touch-manipulation overflow-y-auto overscroll-contain p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] scroll-thin">
+              <ul ref={listRef} onKeyDown={onListKeyDown} className="max-h-[calc(75dvh-3.5rem)] touch-manipulation overflow-y-auto overscroll-contain p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] scroll-thin [scrollbar-gutter:stable]">
                 {contents.map((item, i) => {
                   if (item.kind === "top") {
                     return (

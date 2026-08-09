@@ -196,7 +196,7 @@ export function FileQueue({
         </p>
       ) : (
         <ul
-          className="flex-1 divide-y divide-border/60 overflow-y-auto scroll-thin"
+          className="flex-1 divide-y divide-border/60 overflow-y-auto scroll-thin [scrollbar-gutter:stable]"
           aria-label="Conversion queue"
           aria-busy={jobs.some((j) => ACTIVE.has(j.status))}
         >
@@ -263,8 +263,10 @@ function QueueRow({
    *  strip variant (icon + text, 44px targets); icon-only otherwise.
    *  Whole-job Copy lives in the ingot header and chunking in the ingot's
    *  Chunking switch — neither is duplicated on rows. */
-  const buildActions = (labeled: boolean) => {
-    const cls = labeled ? "min-h-11" : "min-h-11 min-w-11";
+  const buildActions = (labeled: boolean, icon44 = false) => {
+    // Desktop icon-only actions sit at the 40px floor; the mobile inline
+    // primary (`icon44`) keeps 44px so phone touch targets never regress.
+    const cls = labeled ? "min-h-11" : icon44 ? "min-h-11 min-w-11" : "min-h-10 min-w-10";
     const iconCls = "size-4";
     const withLabel = (icon: React.ReactNode, label: string) => (
       <>
@@ -332,11 +334,11 @@ function QueueRow({
       aria-label={`${job.file.name} — ${job.status}`}
       onClick={onSelect}
       className={cn(
-        "relative cursor-pointer px-4 py-3 transition-colors duration-150 [content-visibility:auto] [contain-intrinsic-size:auto_64px]",
+        "relative cursor-pointer px-4 py-2 transition-colors duration-150 [content-visibility:auto] [contain-intrinsic-size:auto_76px]",
         selected ? "bg-accent/60" : "hover:bg-accent/30",
       )}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
         <button
           role="checkbox"
           aria-checked={checked}
@@ -365,35 +367,40 @@ function QueueRow({
           className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:rounded-md focus-visible:border-ring"
         >
           <span
-            className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background"
+            className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background"
             style={{ color: family ? `var(--${FAMILY_TOKEN[family]})` : "var(--muted-foreground)" }}
             aria-hidden
           >
             {job.kind ? (
-              <FileText className="size-4" />
+              <FileText className="size-3.5" />
             ) : family ? (
-              <FamilyGlyph family={family} />
+              <FamilyGlyph family={family} className="size-3.5" />
             ) : (
-              <FileQuestion className="size-4" />
+              <FileQuestion className="size-3.5" />
             )}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-2">
-              <span className="truncate text-sm font-medium text-foreground">{job.file.name}</span>
+            <span className="flex items-start gap-1.5">
+              <span
+                className="min-w-0 flex-1 line-clamp-2 [overflow-wrap:anywhere] text-sm font-medium leading-snug text-foreground"
+                title={job.file.name}
+              >
+                {job.file.name}
+              </span>
               {job.kind ? (
-                <span className="shrink-0 rounded-full border border-border/70 bg-background px-1.5 py-px font-mono text-[11px] uppercase tracking-wide text-steel">
+                <span className="mt-px shrink-0 rounded-full border border-border/70 bg-background px-1.5 py-px font-mono text-[10px] uppercase tracking-wide text-steel">
                   {job.kind}
                 </span>
               ) : job.format && family ? (
                 <span
-                  className="shrink-0 rounded-full border border-border/70 bg-background px-1.5 py-px font-mono text-[11px] uppercase tracking-wide"
+                  className="mt-px shrink-0 rounded-full border border-border/70 bg-background px-1.5 py-px font-mono text-[10px] uppercase tracking-wide"
                   style={{ color: `var(--${FAMILY_TOKEN[family]})` }}
                 >
                   {job.format}
                 </span>
               ) : null}
             </span>
-            <span className="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">
+            <span className="mt-0.5 block truncate font-mono text-[10px] leading-snug text-muted-foreground">
               {formatSize(job.file.size)}
               {job.status === "done"
                 ? job.kind
@@ -408,7 +415,7 @@ function QueueRow({
           {actions}
         </div>
         <div className="flex items-center gap-1 sm:hidden" onClick={(e) => e.stopPropagation()}>
-          {actions[0]}
+          {buildActions(false, true)[0]}
           {actions.length > 1 && (
             <Button
               variant="ghost"

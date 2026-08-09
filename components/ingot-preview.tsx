@@ -73,7 +73,7 @@ export function IngotPreview({
 
   if (!job) {
     return (
-      <div className="flex min-h-[480px] flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card px-6 text-center lg:h-[600px]">
+      <div className="flex min-h-[480px] flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card px-6 text-center lg:h-[var(--ingot-h,600px)] lg:max-h-[85dvh]">
         <p className="font-display text-2xl font-semibold text-muted-foreground">
           Your markdown lands here.
         </p>
@@ -98,7 +98,7 @@ export function IngotPreview({
       : null;
 
   return (
-    <div className="flex h-[60dvh] min-h-[480px] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[600px]">
+    <div className="flex h-[60dvh] min-h-[480px] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[var(--ingot-h,600px)] lg:max-h-[85dvh]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/60 px-4 py-3">
         <span
           className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background"
@@ -242,7 +242,7 @@ export function IngotPreview({
           className="min-h-0 flex-1 overflow-hidden"
         >
           {huge ? (
-            <div className="h-full overflow-y-auto scroll-thin bg-paper text-paper-foreground">
+            <div className="h-full overflow-y-auto scroll-thin scroll-thin-on-paper [scrollbar-gutter:stable] bg-paper text-paper-foreground">
               <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
                 <p className="mb-4 rounded-lg border border-dashed border-paper-line bg-paper-chip px-3 py-2 font-mono text-xs text-paper-muted">
                   Large output — shown as raw text. Download the .md for the full file.
@@ -268,7 +268,7 @@ export function IngotPreview({
               }
             />
           ) : (
-            <div className="h-full overflow-y-auto scroll-thin bg-paper text-paper-foreground">
+            <div className="h-full overflow-y-auto scroll-thin scroll-thin-on-paper [scrollbar-gutter:stable] bg-paper text-paper-foreground">
               <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
                 <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed">
                   {job.markdown}
