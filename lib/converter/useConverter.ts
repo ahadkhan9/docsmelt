@@ -113,9 +113,6 @@ export function useConverter() {
   const keysRef = useRef(new Map<string, JobKey>());
   const jobsRef = useRef<JobView[]>([]);
   jobsRef.current = jobs;
-  const engineRef = useRef<EngineState>("cold");
-  engineRef.current = engine;
-
   const setJob = useCallback((id: string, patch: Partial<JobView>) => {
     setJobs((list) => list.map((j) => (j.id === id ? { ...j, ...patch } : j)));
   }, []);
@@ -169,12 +166,15 @@ export function useConverter() {
     [attachChunks],
   );
 
-  /** Load the engine on demand. Safe to call concurrently (pool dedupes). */
+  /** Load the engine on demand. Safe to call concurrently (pool dedupes).
+   *  The engine state is ALWAYS derived from the pool — a cached 'ready'
+   *  shortcut here caused the long-run loop: the 60 s idle teardown (or
+   *  pagehide) terminates all workers, and the next batch then enqueued
+   *  into a zero-worker pool forever. ensureReady() re-initializes after
+   *  any teardown (readyPromise resets). */
   const ensureEngine = useCallback(async (): Promise<boolean> => {
-    if (engineRef.current === "ready") return true;
-    if (engineRef.current === "error") return false;
-    setEngine("loading");
     try {
+      if (!getPool().isWarm()) setEngine("loading");
       await getPool().ensureReady();
       setEngine("ready");
       return true;
@@ -361,6 +361,7 @@ export function useConverter() {
     }
     setJobs((list) => list.filter((j) => !(j.status === "done" || j.status === "failed" || j.status === "cancelled")));
     setSelectedId(null);
+    setChecked([]); // stale ids would otherwise linger in the batch bar
   }, []);
 
   const downloadMarkdown = useCallback((id: string) => {

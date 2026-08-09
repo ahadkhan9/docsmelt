@@ -57,6 +57,13 @@ export function fitsBudget(
 }
 
 export class ConverterPool {
+  /**
+   * Test seam: inject a worker factory. The default keeps the literal
+   * `new Worker(new URL(...))` expression (webpack's static analysis
+   * requires it in spawn()).
+   */
+  constructor(private readonly workerFactory?: () => Worker) {}
+
   private compiled: WebAssembly.Module | null = null;
   private workers: Worker[] = [];
   private busy = new Set<Worker>();
@@ -159,13 +166,28 @@ export class ConverterPool {
     if (hit) this.kill(hit[0], "cancelled");
   }
 
-  /** Release all workers (pagehide). The compiled Module stays. */
+  /** Release all workers (pagehide, idle teardown). The compiled Module
+   *  stays, but readyPromise MUST reset — otherwise the next ensureReady()
+   *  returns the stale resolved promise while the pool has zero workers,
+   *  and every subsequent job wedges in the queue forever (the long-run
+   *  'stays in a loop' bug). */
   terminateAll(): void {
     for (const w of this.workers) w.terminate();
     this.workers = [];
     this.busy.clear();
     this.inflight.clear();
+    this.readyPromise = null;
     if (this.idleTimer) clearTimeout(this.idleTimer);
+  }
+
+  /** True when workers exist — the hook uses it to avoid flashing the
+   *  loading state when the pool is already warm. */
+  isWarm(): boolean {
+    return this.workers.length > 0;
+  }
+
+  get workerCount(): number {
+    return this.workers.length;
   }
 
   private pump(): void {
@@ -203,10 +225,13 @@ export class ConverterPool {
 
   private spawn(): Promise<void> {
     // ONE LINE, inline — hoisting the URL breaks webpack's static analysis
-    // and the worker chunk silently fails to emit.
-    const worker = new Worker(new URL("./converter.worker.ts", import.meta.url), {
-      type: "module",
-    });
+    // and the worker chunk silently fails to emit. (Tests inject a fake
+    // worker via the constructor.)
+    const worker = this.workerFactory
+      ? this.workerFactory()
+      : new Worker(new URL("./converter.worker.ts", import.meta.url), {
+          type: "module",
+        });
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => this.onMessage(worker, event.data);
     worker.onerror = () => this.kill(worker, "engine");
     this.workers.push(worker);
