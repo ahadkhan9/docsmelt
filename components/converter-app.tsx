@@ -76,6 +76,8 @@ export default function ConverterApp() {
                   onDownloadMd={c.downloadMarkdown}
                   onDownloadZip={c.downloadZip}
                   onClearFinished={c.clearFinished}
+                  onExportAll={() => void c.exportAll()}
+                  exporting={c.exporting}
                 />
                 <IngotPreview
                   job={c.selected}

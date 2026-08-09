@@ -9,10 +9,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AnyFormat, Document } from "./protocol";
+import type { AnyFormat, Asset, Document } from "./protocol";
 import { ConverterPool } from "./pool";
 import { decodeText, detectPassThrough, type PassThroughKind } from "./passthrough";
-import { zipDocument } from "./zip";
+import { buildExportZip, zipDocument } from "./zip";
+import { supportsZip } from "./formats";
 
 let pool: ConverterPool | null = null;
 const getPool = () => (pool ??= new ConverterPool());
@@ -57,6 +58,7 @@ export function useConverter() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [engine, setEngine] = useState<EngineState>("cold");
   const [now, setNow] = useState(() => Date.now());
+  const [exporting, setExporting] = useState(false);
 
   const keysRef = useRef(new Map<string, JobKey>());
   const jobsRef = useRef<JobView[]>([]);
@@ -246,6 +248,54 @@ export function useConverter() {
     }
   }, [setJob]);
 
+  /**
+   * Export all done jobs as one .zip. Assets come from a lazy toDocument
+   * pass, run sequentially (memory-safe). Jobs flip to 'packing' while
+   * their assets are gathered; markdown stays visible in the preview.
+   */
+  const exportAll = useCallback(async (): Promise<boolean> => {
+    const done = jobsRef.current.filter((j) => j.status === "done");
+    if (done.length === 0 || exporting) return false;
+    if (jobsRef.current.some((j) => j.status === "packing")) return false;
+    setExporting(true);
+    for (const job of done) setJob(job.id, { status: "packing" });
+    try {
+      const entries: { name: string; markdown: string; assets?: Asset[] }[] = [];
+      for (const job of done) {
+        const entry: { name: string; markdown: string; assets?: Asset[] } = {
+          name: job.file.name,
+          markdown: job.markdown ?? "",
+        };
+        // Asset-capable formats need a fresh toDocument run (the original
+        // .md path never stored the document model). Pass-through files
+        // have no assets by definition.
+        if (!job.kind && job.format && supportsZip(job.format)) {
+          try {
+            const bytes = new Uint8Array(await job.file.arrayBuffer());
+            const key = keysRef.current.get(job.id);
+            if (key?.cancelled) continue;
+            const conv = getPool().enqueue("convert", job.file.name, bytes, {
+              format: job.format,
+              wantDocument: true,
+            });
+            key && (key.poolJob = conv.id);
+            const res = await conv.promise;
+            if (res.ok) entry.assets = (res.result as Document).assets;
+          } catch {
+            // Asset pass failed — export the markdown alone, honestly.
+          }
+        }
+        entries.push(entry);
+      }
+      const blob = await buildExportZip(entries);
+      download(blob, `docsmelt-export-${entries.length}-files.zip`);
+      return true;
+    } finally {
+      for (const job of done) setJob(job.id, { status: "done" });
+      setExporting(false);
+    }
+  }, [exporting, setJob]);
+
   // One shared clock while anything is active — rows derive elapsed time.
   useEffect(() => {
     if (!jobs.some((j) => ACTIVE.has(j.status))) return;
@@ -264,8 +314,8 @@ export function useConverter() {
   const activeCount = jobs.filter((j) => ACTIVE.has(j.status)).length;
 
   return {
-    jobs, selected, engine, now,
-    addFiles, cancel, remove, retry, clearFinished,
+    jobs, selected, engine, now, exporting,
+    addFiles, cancel, remove, retry, clearFinished, exportAll,
     downloadMarkdown, downloadZip, select: setSelectedId,
     activeCount,
   };

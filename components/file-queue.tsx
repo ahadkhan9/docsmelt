@@ -38,6 +38,8 @@ export function FileQueue({
   onDownloadMd,
   onDownloadZip,
   onClearFinished,
+  onExportAll,
+  exporting,
 }: {
   jobs: JobView[];
   now: number;
@@ -49,24 +51,45 @@ export function FileQueue({
   onDownloadMd: (id: string) => void;
   onDownloadZip: (id: string) => void;
   onClearFinished: () => void;
+  onExportAll: () => void;
+  exporting: boolean;
 }) {
   const doneCount = jobs.filter((j) => j.status === "done").length;
   const finished = jobs.some((j) => ["done", "failed", "cancelled"].includes(j.status));
 
   return (
     <div className="flex max-h-[600px] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:max-h-none">
-      <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
+      <div className="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
         <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
           Queue{" "}
           <span className="text-foreground">
             {doneCount}/{jobs.length}
           </span>
         </h2>
-        {finished && (
-          <Button variant="ghost" size="sm" className="min-h-10" onClick={onClearFinished}>
-            Clear finished
-          </Button>
-        )}
+        <div className="flex items-center gap-1">
+          {doneCount > 0 && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className="min-h-10"
+              onClick={onExportAll}
+              disabled={exporting}
+              title={
+                exporting
+                  ? "Packing files…"
+                  : `Export ${doneCount} converted file${doneCount === 1 ? "" : "s"} as one .zip`
+              }
+            >
+              <Archive className="size-3.5" aria-hidden />
+              {exporting ? "Exporting…" : "Export all"}
+            </Button>
+          )}
+          {finished && (
+            <Button variant="ghost" size="sm" className="min-h-10" onClick={onClearFinished}>
+              Clear finished
+            </Button>
+          )}
+        </div>
       </div>
       {jobs.length === 0 ? (
         <p className="px-4 py-10 text-center font-mono text-xs leading-relaxed text-muted-foreground">
