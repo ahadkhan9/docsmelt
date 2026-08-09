@@ -10,7 +10,7 @@ export type ErrorKind = ConvertErrorCode | "engine" | "fileTooLarge";
 export const ERROR_UX: Record<ErrorKind, { title: string; hint: string }> = {
   unsupported: {
     title: "We can’t smelt this file",
-    hint: "The format is unrecognized or unsupported. CSV needs a .csv name; text-based PDFs work, scanned ones need OCR.",
+    hint: "docsmelt converts 21 office formats — PDF, DOCX, XLSX, PPTX, RTF, EPUB, ODS, CSV and more. This file’s content matches none of them; it may be an image, an archive, plain text, or a format docsmelt doesn’t know.",
   },
   malformed: {
     title: "File is corrupt or unreadable",
@@ -52,8 +52,14 @@ export function refine(
   }
   if (code === "unsupported" && /\.csv$/i.test(fileName)) {
     return {
-      title: "CSV needs its format named",
-      hint: "CSV has no file signature. Make sure the file ends in .csv and retry.",
+      title: "CSV is only recognized by its name",
+      hint: "CSV has no file signature — it’s detected from the .csv file name. If this file really is CSV, make sure it ends in .csv and retry.",
+    };
+  }
+  if (code === "unsupported" && /\.(md|markdown)$/i.test(fileName)) {
+    return {
+      title: "Already Markdown",
+      hint: "No smelting needed — this file is already Markdown. docsmelt converts office documents into Markdown.",
     };
   }
   return ERROR_UX[code];

@@ -203,10 +203,10 @@ writeFileSync(
   writeFileSync("samples/sample-scanned.pdf", scanned);
 }
 
-// Encrypted-looking OOXML: minimal OLE compound file whose directory names
-// the EncryptedPackage stream. Detection returns undefined by design;
-// the extension fallback + OLE probe land on the `encrypted` error.
-{
+// Minimal OLE compound file whose directory names a single stream.
+// Enough for the engine's detection (stream-name probing) and for the
+// encrypted path (probe_ole on EncryptedPackage).
+function oleCfb(streamName) {
   const header = Buffer.alloc(512);
   header.writeUInt32LE(0xe011cfd0, 0); // OLE magic
   header.writeUInt32LE(0xe11ab1a1, 4);
@@ -241,18 +241,25 @@ writeFileSync(
   dir.writeUInt32LE(1, 76); // child → entry 1
   dir.writeUInt32LE(0xfffffffe, 116); // start sector
   dir.writeUInt32LE(0, 120); // size (low 32)
-dir.writeUInt32LE(0, 124); // size (high 32)
-  nameAt(dir, "EncryptedPackage", 128);
-  dir.writeUInt16LE(34, 128 + 64); // 16 chars ×2 + 2
+  dir.writeUInt32LE(0, 124); // size (high 32)
+  nameAt(dir, streamName, 128);
+  dir.writeUInt16LE(streamName.length * 2 + 2, 128 + 64);
   dir[128 + 66] = 2; // stream
   dir.writeUInt32LE(0xffffffff, 128 + 68);
   dir.writeUInt32LE(0xffffffff, 128 + 72);
   dir.writeUInt32LE(0xffffffff, 128 + 76);
   dir.writeUInt32LE(0, 128 + 116); // start sector 0
   dir.writeUInt32LE(0, 128 + 120);
-dir.writeUInt32LE(0, 128 + 124);
-  writeFileSync("samples/sample-encrypted.docx", Buffer.concat([header, fat, dir]));
+  dir.writeUInt32LE(0, 128 + 124);
+  return Buffer.concat([header, fat, dir]);
 }
+
+// Encrypted-looking OOXML: detection returns undefined by design; the
+// extension fallback + OLE probe land on the `encrypted` error.
+writeFileSync("samples/sample-encrypted.docx", oleCfb("EncryptedPackage"));
+
+// Legacy binary .doc: detection must identify the WordDocument stream.
+writeFileSync("samples/sample-legacy.doc", oleCfb("WordDocument"));
 
 // Docx with an embedded image → toDocument must return it as an asset.
 {
@@ -303,5 +310,6 @@ console.log(
   "samples written:",
   ["sample.docx", "sample.xlsx", "sample.epub", "sample.csv", "sample.rtf", "sample.pdf",
    "sample-empty.docx", "sample-zero.docx", "sample-truncated.docx", "sample-unsupported.png",
-   "sample-scanned.pdf", "sample-encrypted.docx", "sample-image.docx"].join(", "),
+   "sample-scanned.pdf", "sample-encrypted.docx", "sample-image.docx",
+   "sample-legacy.doc"].join(", "),
 );
