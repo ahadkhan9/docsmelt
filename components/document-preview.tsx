@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Copy, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MobilePreview } from "./mobile-preview";
+import { PreviewSelectorBar } from "./preview-selector-bar";
 import { ChunkBlock, SectionBlock } from "./preview-blocks";
 import { MarkdownView } from "./markdown";
 import { chunkSummary, type RagChunk } from "@/lib/converter/chunk";
+import { buildSelectorModel } from "@/lib/converter/selector";
 import { parseSections, sectionForHeading } from "@/lib/converter/sections";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +37,7 @@ export function DocumentPreview({
 }) {
   const outline = useMemo(() => parseSections(markdown), [markdown]);
   const summary = useMemo(() => (chunks ? chunkSummary(chunks) : null), [chunks]);
+  const selector = useMemo(() => buildSelectorModel(outline, chunks, tokenLabel), [outline, chunks, tokenLabel]);
   const paneRef = useRef<HTMLDivElement>(null);
   const railRef = useRef<HTMLUListElement>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -136,6 +139,14 @@ export function DocumentPreview({
     );
   }
 
+  const spyValue = chunkMode
+    ? activeChunk
+      ? `chunk:${activeChunk}`
+      : null
+    : activeId
+      ? `section:${activeId}`
+      : null;
+
   const outlineItems = outline.sections;
   const activeOutlineId =
     chunkMode && activeChunk && chunks
@@ -199,6 +210,15 @@ export function DocumentPreview({
           )}
         </aside>
 
+        <div className="flex min-h-0 flex-1 flex-col">
+        {/* the Selector Bar — precise jumps + the always-visible active label;
+            the rail above stays (mouse + hover + keyboard) */}
+        <PreviewSelectorBar
+          model={selector}
+          value={spyValue ?? ""}
+          kind={chunkMode ? "chunk" : "section"}
+          onJump={jumpTo}
+        />
         {/* content scroller */}
         <div
           ref={paneRef}
@@ -236,6 +256,7 @@ export function DocumentPreview({
               </>
             )}
           </div>
+        </div>
         </div>
 
         {/* the molten level rail */}

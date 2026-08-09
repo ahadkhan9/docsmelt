@@ -7,6 +7,8 @@ import { ChunkBlock, SectionBlock } from "./preview-blocks";
 import { MarkdownView } from "./markdown";
 import { chunkSummary, type RagChunk } from "@/lib/converter/chunk";
 import { buildContents, rovingIndex } from "@/lib/converter/contents";
+import { PreviewSelectorBar } from "./preview-selector-bar";
+import { buildSelectorModel } from "@/lib/converter/selector";
 import { parseSections, sectionForHeading } from "@/lib/converter/sections";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +38,7 @@ export function MobilePreview({
   const outline = useMemo(() => parseSections(markdown), [markdown]);
   const summary = useMemo(() => (chunks ? chunkSummary(chunks) : null), [chunks]);
   const contents = useMemo(() => buildContents(outline, chunks), [outline, chunks]);
+  const selector = useMemo(() => buildSelectorModel(outline, chunks, tokenLabel), [outline, chunks, tokenLabel]);
   const paneRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -142,6 +145,14 @@ export function MobilePreview({
     buttons[next]?.focus();
   };
 
+  const spyValue = chunkMode
+    ? activeChunk
+      ? `chunk:${activeChunk}`
+      : null
+    : activeId
+      ? `section:${activeId}`
+      : null;
+
   const activeOutlineId =
     chunkMode && activeChunk && chunks
       ? (sectionForHeading(outline, chunks[activeChunk - 1]?.meta.headingPath ?? [])?.id ??
@@ -150,6 +161,14 @@ export function MobilePreview({
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
+      {/* the Selector Bar — native select + pager + counter (Flow B: chunks,
+          Flow A: sections); gated to ≥2 items */}
+      <PreviewSelectorBar
+        model={selector}
+        value={spyValue ?? ""}
+        kind={chunkMode ? "chunk" : "section"}
+        onJump={jumpTo}
+      />
       {/* content scroller — plain, no sticky, no nested scroll containers */}
       <div
         ref={paneRef}
