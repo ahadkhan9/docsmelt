@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
-import { CHARS_PER_TOKEN, chunkMarkdown, chunkMarkdownAsync, chunkSummary, chunkZip, estimateTokens, resolveChunkOptions, shouldChunkInWorker } from "./chunk";
+import { CHARS_PER_TOKEN, chunkMarkdown, chunkMarkdownAsync, chunkSummary, chunkZip, estimateTokens, resolveChunkOptions, shouldChunkInWorker, type RagChunk } from "./chunk";
 
 const fenceState = (content: string): "closed" | "open" => {
   let state: string | null = null;
@@ -478,5 +478,30 @@ describe("chunkSummary", () => {
     expect(summary.tablesKept).toBeGreaterThanOrEqual(1);
     expect(summary.oversized).toBeGreaterThanOrEqual(0);
     expect(chunkSummary([])).toEqual({ count: 0, avgTokens: 0, tablesKept: 0, oversized: 0 });
+  });
+});
+
+describe("chunkMarkdownAsync — worker failure fallback (collapse-bug recreation)", () => {
+  it("falls back to the main thread when the worker rejects", async () => {
+    const big = "filler text ".repeat(180_000); // > 1 MB → worker path
+    const result = await chunkMarkdownAsync(
+      big,
+      { targetTokens: 512 },
+      async () => {
+        throw new Error("worker boom"); // the deploy-swap/offline failure
+      },
+    );
+    expect(result.encoding).toBe("cl100k_base");
+    expect(result.chunks.length).toBeGreaterThan(1);
+  });
+
+  it("bounds pathological unbreakable runs (2M-char blob resolves fast)", async () => {
+    const blob = "x".repeat(2_000_000); // the lib's countTokens would take > 40 s
+    const t0 = Date.now();
+    const result = await chunkMarkdownAsync(blob, { targetTokens: 512 });
+    const elapsed = Date.now() - t0;
+    expect(elapsed).toBeLessThan(10_000); // bounded, not a hang
+    expect(result.chunks.length).toBe(1);
+    expect(result.chunks[0].content).toContain("x");
   });
 });

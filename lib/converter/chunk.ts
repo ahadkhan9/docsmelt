@@ -101,6 +101,16 @@ function scanFenceState(lines: string[], initialState: string | null): string | 
   return state;
 }
 
+/** Unbreakable ASCII runs (base64 blobs, minified lines) make the BPE
+ *  tokenizer pathologically slow (measured: 2M 'x' chars > 40 s vs 431 ms
+ *  for spaced text). Beyond a threshold, skip the exact count and use the
+ *  chars/4 estimate — the walk's budget checks treat them as over. */
+const UNBREAKABLE_CHARS = 100_000;
+const isUnbreakableRun = (text: string): boolean =>
+  text.length > UNBREAKABLE_CHARS &&
+  !text.includes(" ") &&
+  !/[一-鿿㐀-䶿]/.test(text);
+
 /** Whether a set of lines contains at least one table row (for overlap
  *  seeds — the seed's table already closed in the previous chunk, so only
  *  the flag carries over, never the active state). */
@@ -239,7 +249,10 @@ export function chunkMarkdown(
           moved = trimmed.moved;
         }
       }
-      const tokens = tokenizer ? tokenizer.count(content) : estimateTokens(content);
+      const tokens =
+        tokenizer && !isUnbreakableRun(content)
+          ? tokenizer.count(content)
+          : estimateTokens(content);
       const firstLine = content.split("\n").find((l) => l.trim() !== "") ?? "";
       const startsSection =
         HEADING_RE.test(firstLine) &&
@@ -325,7 +338,10 @@ export function chunkMarkdown(
       if (tokenizer && gateActive) {
         // Exact budget check at the gate (and per line while the gate is
         // active — the adaptive ratio keeps this window small).
-        const within = tokenizer.withinLimit(buffer.join("\n"), targetTokens);
+        const bufferText = buffer.join("\n");
+        const within = isUnbreakableRun(bufferText)
+          ? false // pathological to count — treat as over, close the chunk
+          : tokenizer.withinLimit(bufferText, targetTokens);
         if (within === false || within === null) {
           closeChunk();
           pushSeed();
@@ -477,10 +493,11 @@ export function shouldChunkInWorker(markdownLength: number, workerAvailable: boo
 export async function chunkMarkdownAsync(
   markdown: string,
   options: ChunkOptions,
+  workerImpl: (m: string, o: ChunkOptions) => Promise<ChunkResult> = runInChunkWorker,
 ): Promise<ChunkResult> {
   if (shouldChunkInWorker(markdown.length, typeof Worker !== "undefined")) {
     try {
-      return await runInChunkWorker(markdown, options);
+      return await workerImpl(markdown, options);
     } catch {
       // Worker failed to load or run (deploy-swap window, offline, CSP) —
       // fall back to the main-thread path instead of failing the caller.

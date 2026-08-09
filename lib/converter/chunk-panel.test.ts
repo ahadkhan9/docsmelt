@@ -28,3 +28,19 @@ describe("chunkPanelVisible", () => {
     expect(CHUNK_PANEL_ERROR).toContain("Try again");
   });
 });
+
+describe("collapse-bug recreation — the full click → failure/success sequences", () => {
+  it("failure sequence: click → loading → error, panel STAYS OPEN", () => {
+    // click: chunkOpen true, computeChunks starts (loading)
+    expect(chunkPanelVisible(true, false, true, false)).toBe(true);
+    // the async path fails: chunks null, loading ends, error lands
+    expect(chunkPanelVisible(true, false, false, true)).toBe(true); // no collapse
+    // user closes explicitly → gone
+    expect(chunkPanelVisible(false, false, false, true)).toBe(false);
+  });
+
+  it("success sequence: click → loading → chunks render", () => {
+    expect(chunkPanelVisible(true, false, true, false)).toBe(true);
+    expect(chunkPanelVisible(true, true, false, false)).toBe(true);
+  });
+});
