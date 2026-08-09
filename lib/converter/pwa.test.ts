@@ -29,6 +29,7 @@ describe("collectShellAssets", () => {
   it("lists hashed shell assets but never the wasm engine", () => {
     const dir = mkdtempSync(join(tmpdir(), "docsmelt-sw-"));
     mkdirSync(join(dir, "_next/static/chunks"), { recursive: true });
+    mkdirSync(join(dir, "_next/static/css"), { recursive: true });
     mkdirSync(join(dir, "_next/static/media"), { recursive: true });
     writeFileSync(join(dir, "_next/static/chunks/main-app-abc.js"), "");
     writeFileSync(join(dir, "_next/static/chunks/815.def.js"), "");
