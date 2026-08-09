@@ -21,9 +21,14 @@ Drop a document on the page and it converts to clean, GitHub-flavored Markdown w
 - **Files never leave the browser.** Conversion is a 6.5 MB WASM module running client-side. The privacy guarantee is the architecture, not a policy page.
 - **No frozen tabs.** A lazy pool of module workers shares one compiled `WebAssembly.Module`; the main thread never blocks. Cancel a conversion by terminating the worker, and a crashed one respawns in ~100–200 ms.
 - **Markdown pass-through.** Drop a `.md`, `.markdown` or plain-text `.txt` file and it's recognized instantly — preview, copy, download, no conversion involved.
-- **Batch, paste, queue.** Add many files at once, paste from the clipboard, watch per-file status, download each result as `.md` or a `.zip` with all embedded images.
+- **Batch, paste, queue.** Add many files at once (folders included — dropped directories are walked recursively), paste from the clipboard, watch per-file status, download each result as `.md` or a `.zip` with all embedded images, or **Export all** as one archive.
+- **Chunk for RAG.** Any converted document splits into LLM-ready chunks — 500/1000-token presets, heading-aware boundaries, ~10% overlap, code fences never split — downloadable as numbered `.md` files plus an index.
+- **Multi-select.** Checkboxes with shift-range select → batch delete, export as `.zip`, copy all markdown.
+- **History & offline.** Done jobs persist to IndexedDB (restore banner after reload, 50 MB cap); the app is a PWA — installable, and converts fully offline after one online visit.
+- **Keyboard-first.** `⌘O` open, `⌘⇧V` paste, `⌘D` download, `Esc` cancel/clear, `1–9` select rows.
 - **Honest errors.** The engine's error taxonomy (`unsupported`, `malformed`, `encrypted`, `resourceLimit`, `missingPart`) maps to copy that names the problem and the way out — including a dedicated "scanned PDF needs OCR" hint.
 - **Every format is designed-for.** Each format family has its own color and glyph, shown as a badge before conversion even starts.
+- **Measured, not promised.** A [benchmark page](https://docsmelt.vercel.app/benchmark) reports real median conversion times from the actual wasm binary.
 
 ## Supported formats
 

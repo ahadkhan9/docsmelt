@@ -6,33 +6,37 @@ anydoc demo: `/home/ahadk9/research/anydoc/docsmelt-vs-demo-and-roadmap.md`.
 
 Tags: ⚡ quick win (<2 h) · 🔨 weekend build (3–6 h) · 🚀 moonshot (8+ h)
 
-## Next 3 moves (build these first)
+## Shipped ✓
 
-1. **Chunk-for-RAG preset + export-all-as-zip** (~8 h) — split converted
-   markdown into fixed-token chunks (500/1000 tok, heading-aware, ~10%
-   overlap) for LLM pipelines; download chunks or the whole batch as one
-   zip. Pure client text processing — the differentiator no converter demo
-   has. Reuses the existing jszip/download plumbing.
-2. **Folder-drop + queue multi-select** (~5 h) — traverse dropped
-   directories (`webkitGetAsEntry`) into the queue; checkboxes → batch
-   delete/export/copy. Closes the real-world batch gap.
-3. **Ingot favicon + OG image + benchmark page** (~5 h) — an SVG ingot
-   mark (replaces the default favicon), a static social card for repo/link
-   shares, and a page with measured conversion numbers (real engine runs,
-   like the test suites) plus the 21-format table.
+- ✓ **Chunk-for-RAG preset + export-all-as-zip** — heading-aware
+  fixed-token chunks (500/1000, ~10% overlap, fences intact) with per-row
+  panel + stats + numbered zip; Export all packs every done job (md +
+  embedded assets + index) into one archive.
+- ✓ **Folder-drop + queue multi-select** — recursive directory walking
+  (entry API, cycle-safe, Firefox fallback with honest messaging);
+  checkboxes with shift-range select and batch delete / export / copy.
+- ✓ **Branding bundle** — ingot favicon (SVG + 192/512 PNG install icons),
+  The-Foundry OG card (1200×630, built at export), and a `/benchmark`
+  page with real measured numbers (scripts/benchmark.mjs → committed
+  data.json — never hand-written).
+- ✓ **PWA / offline** — manifest, hand-rolled service worker (shell
+  precache from a post-build sw-manifest; the 6.5 MB wasm caches lazily on
+  first use → repeat visitors convert fully offline).
+- ✓ **Conversion history (IndexedDB)** — restore banner, 50 MB cap with
+  honest trimming, Clear history control; restored jobs keep preview/copy/
+  .md (retry/zip need the original file and are disabled).
+- ✓ **Keyboard-first** — ⌘O / ⌘⇧V / ⌘D / Esc / 1–9 with editing-context
+  guards, kbd hints hidden on touch.
 
-## Backlog
+## Next up (backlog)
 
 | Idea | Tag | Why |
 |---|---|---|
-| PWA / offline (manifest + hand-rolled SW, cache wasm after first visit) | 🔨 3–4 h | "No server, no network" completes the story |
-| Conversion history (IndexedDB) — restore queue after reload | 🔨 4–6 h | Pairs with PWA; continuity |
-| Keyboard-first (⌘O / ⌘⇧V / ⌘D / ⌘R / 1–9 row select) | 🔨 3–4 h | Dev audience; cheap |
 | GitHub gist export (OAuth PKCE popup, token in memory) | 🔨 6–8 h | Zero-server-compatible if the secret never touches a server |
-| OCR for scanned PDFs (user-pasted Firecrawl key, browser calls Parse) | 🔨 4–6 h | Only if Parse allows browser CORS — verify first; otherwise an optional single serverless function (secret stays server-side) |
+| OCR for scanned PDFs (user-pasted Firecrawl key, browser calls Parse) | 🔨 4–6 h | Only if Parse allows browser CORS — verify first; otherwise an optional single serverless function |
 | HTML export / copy as HTML | ⚡ 1–2 h | Reuse MarkdownView + template |
-| Google Drive import/export (bring-your-own GCP client ID) | 🚀 10–12 h | Zero-server possible; setup friction high |
 | PDF page-range extraction (pdf.js slicing → engine) | 🚀 10–12 h | One justified dep; memory care needed |
+| Google Drive import/export (bring-your-own GCP client ID) | 🚀 10–12 h | Zero-server possible; setup friction high |
 
 ## Rejected (with reasons)
 
