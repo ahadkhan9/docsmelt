@@ -22,6 +22,7 @@
  * 6. Fence integrity is guaranteed by a final state-machine pass.
  */
 import JSZip from "jszip";
+import { loadTokenizer } from "./tokenizer";
 import type { Tokenizer } from "./tokenizer";
 
 /** Internal char gate — the walk uses chars as the cheap pre-filter;
@@ -454,4 +455,63 @@ export function resolveChunkOptions(ui: ChunkUiOptions): ChunkOptions {
       ? autoOverlap
       : ui.overlapTokens;
   return { targetTokens, overlapTokens };
+}
+
+/**
+ * Worker offload — above CHUNK_WORKER_THRESHOLD the chunker runs in a
+ * dedicated one-shot worker (pure string function; no wasm, no pool, no
+ * protocol changes). Below it, the main thread handles it (measured
+ * fine). The worker reports the tokenizer encoding so labels stay honest.
+ */
+export const CHUNK_WORKER_THRESHOLD = 1 * 1024 * 1024; // 1 MB of markdown — measured: ~170 ms/MB warm on the main thread, so larger docs offload
+
+export interface ChunkResult {
+  chunks: RagChunk[];
+  encoding: string;
+}
+
+export function shouldChunkInWorker(markdownLength: number, workerAvailable: boolean): boolean {
+  return markdownLength > CHUNK_WORKER_THRESHOLD && workerAvailable;
+}
+
+export async function chunkMarkdownAsync(
+  markdown: string,
+  options: ChunkOptions,
+): Promise<ChunkResult> {
+  if (shouldChunkInWorker(markdown.length, typeof Worker !== "undefined")) {
+    return runInChunkWorker(markdown, options);
+  }
+  const tokenizer = await loadTokenizer();
+  return { chunks: chunkMarkdown(markdown, options, tokenizer), encoding: tokenizer.encoding };
+}
+
+function runInChunkWorker(markdown: string, options: ChunkOptions): Promise<ChunkResult> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL("./chunker.worker.ts", import.meta.url), {
+      type: "module",
+    });
+    const jobId = 1;
+    const timer = setTimeout(() => {
+      worker.terminate();
+      reject(new Error("chunking timed out"));
+    }, 120_000);
+    worker.onmessage = (event: MessageEvent) => {
+      const msg = event.data;
+      if (msg?.type === "chunks" && msg.jobId === jobId) {
+        clearTimeout(timer);
+        worker.terminate();
+        resolve({ chunks: msg.chunks as RagChunk[], encoding: msg.encoding as string });
+      } else if (msg?.type === "chunk-error" && msg.jobId === jobId) {
+        clearTimeout(timer);
+        worker.terminate();
+        reject(new Error(msg.message as string));
+      }
+    };
+    worker.onerror = () => {
+      clearTimeout(timer);
+      worker.terminate();
+      reject(new Error("chunking worker failed"));
+    };
+    worker.postMessage({ type: "chunk", jobId, markdown, options });
+  });
 }

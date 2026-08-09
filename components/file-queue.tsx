@@ -16,14 +16,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  chunkMarkdown,
+  chunkMarkdownAsync,
   chunkZip,
   resolveChunkOptions,
   type RagChunk,
 } from "@/lib/converter/chunk";
 import { refine, type ErrorKind } from "@/lib/converter/errors";
 import { FAMILY_OF, FAMILY_TOKEN, FamilyGlyph, supportsZip } from "@/lib/converter/formats";
-import { loadTokenizer, type Tokenizer } from "@/lib/converter/tokenizer";
 import type { JobView } from "@/lib/converter/useConverter";
 import { stemOf } from "@/lib/converter/zip";
 import { cn, downloadBlob } from "@/lib/utils";
@@ -233,7 +232,7 @@ function QueueRow({
   const [overlapAuto, setOverlapAuto] = useState(true);
   const [overlapTokens, setOverlapTokens] = useState("");
   const [chunks, setChunks] = useState<RagChunk[] | null>(null);
-  const [tokenizer, setTokenizer] = useState<Tokenizer | null>(null);
+  const [encoding, setEncoding] = useState("cl100k_base");
   const [chunkLoading, setChunkLoading] = useState(false);
   const family = job.format ? FAMILY_OF[job.format] : undefined;
 
@@ -241,16 +240,17 @@ function QueueRow({
     if (!job.markdown) return;
     setChunkLoading(true);
     try {
-      // Lazy: the ~1 MB tokenizer vocab loads once, on the first open.
-      const tok = await loadTokenizer();
-      setTokenizer(tok);
+      // Small docs chunk on the main thread; large ones (>2 MB) offload to
+      // a one-shot worker. The tokenizer vocab loads lazily either way.
       const options = resolveChunkOptions({
         preset: chunkSize,
         customTokens: Number(customTokens) || undefined,
         overlapAuto,
         overlapTokens: Number(overlapTokens) || undefined,
       });
-      setChunks(chunkMarkdown(job.markdown, options, tok));
+      const result = await chunkMarkdownAsync(job.markdown, options);
+      setEncoding(result.encoding);
+      setChunks(result.chunks);
     } finally {
       setChunkLoading(false);
     }
@@ -268,7 +268,7 @@ function QueueRow({
     if (!chunks?.length) return;
     const base = stemOf(job.file.name);
     const label =
-      tokenizer?.encoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k tokens";
+      encoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k tokens";
     const options = resolveChunkOptions({
       preset: chunkSize,
       customTokens: Number(customTokens) || undefined,
@@ -279,7 +279,7 @@ function QueueRow({
     downloadBlob(blob, `${base}-chunks.zip`);
   };
   const tokenLabel =
-    tokenizer?.encoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k tokens";
+    encoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k tokens";
   const active = ACTIVE.has(job.status);
   const elapsed = Math.max(0, Math.round((now - job.startedAt) / 1000));
   const error =

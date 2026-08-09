@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
-import { CHARS_PER_TOKEN, chunkMarkdown, chunkZip, estimateTokens, resolveChunkOptions } from "./chunk";
+import { CHARS_PER_TOKEN, chunkMarkdown, chunkMarkdownAsync, chunkZip, estimateTokens, resolveChunkOptions, shouldChunkInWorker } from "./chunk";
 
 const fenceState = (content: string): "closed" | "open" => {
   let state: string | null = null;
@@ -426,5 +426,42 @@ describe("chunkZip sidecar ({stem}-chunks.json, schema v1)", () => {
     // the index still lists oversized tables via the meta flag
     const index = await zip.file("report-index.md")!.async("text");
     expect(index).toContain("RAG chunks");
+  });
+});
+
+describe("chunkMarkdownAsync — worker threshold + main-thread path", () => {
+  it("chunks small docs on the main thread with exact counts", async () => {
+    const result = await chunkMarkdownAsync("word ".repeat(400), { targetTokens: 200 });
+    expect(result.encoding).toBe("cl100k_base");
+    expect(result.chunks.length).toBeGreaterThan(0);
+    for (const c of result.chunks) {
+      expect(c.tokens).toBeGreaterThan(0);
+      expect(c.meta.headingPath).toBeDefined();
+    }
+  });
+
+  it("still works for docs above the threshold when no Worker exists (Node)", async () => {
+    const big = "filler text ".repeat(180_000); // ~2.1 MB
+    const result = await chunkMarkdownAsync(big, { targetTokens: 512 });
+    expect(result.chunks.length).toBeGreaterThan(1);
+    // full coverage: every chunk's content sums to the doc (modulo overlap)
+    const total = result.chunks.reduce((s, c) => s + c.content.length, 0);
+    expect(total).toBeGreaterThan(big.length * 0.9); // overlap inflates slightly
+  });
+
+  it("shouldChunkInWorker honors the threshold and availability", () => {
+    expect(shouldChunkInWorker(1024, true)).toBe(false);
+    expect(shouldChunkInWorker(3 * 1024 * 1024, true)).toBe(true);
+    expect(shouldChunkInWorker(3 * 1024 * 1024, false)).toBe(false);
+  });
+});
+
+describe("chunker.worker — the shared handler", () => {
+  it("handleChunkRequest returns chunks + the encoding", async () => {
+    const { handleChunkRequest } = await import("./chunker.worker");
+    const result = await handleChunkRequest("word ".repeat(300), { targetTokens: 100 });
+    expect(result.encoding).toBe("cl100k_base");
+    expect(result.chunks.length).toBeGreaterThan(0);
+    expect(result.chunks[0].tokens).toBeGreaterThan(0);
   });
 });

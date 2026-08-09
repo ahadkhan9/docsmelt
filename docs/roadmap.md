@@ -12,6 +12,12 @@ Tags: ⚡ quick win (<2 h) · 🔨 weekend build (3–6 h) · 🚀 moonshot (8+ 
   fixed-token chunks (500/1000, ~10% overlap, fences intact) with per-row
   panel + stats + numbered zip; Export all packs every done job (md +
   embedded assets + index) into one archive.
+- ✓ **Chunker v2** — atomic tables (delimiter-confirmed, fence-priority,
+  oversized-flag), exact token budgets via gpt-tokenizer (cl100k, lazy
+  ~1 MB gz vocab, adaptive chars-per-token gate + trim-to-budget,
+  CJK character-boundary pre-splitting), presets 256/512/1024 + custom +
+  honest overlap UX, `chunks.json` metadata sidecar (heading paths,
+  parent refs, table flags), one-shot worker offload above 1 MB.
 - ✓ **Folder-drop + queue multi-select** — recursive directory walking
   (entry API, cycle-safe, Firefox fallback with honest messaging);
   checkboxes with shift-range select and batch delete / export / copy.
