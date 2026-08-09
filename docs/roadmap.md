@@ -12,6 +12,14 @@ Tags: ⚡ quick win (<2 h) · 🔨 weekend build (3–6 h) · 🚀 moonshot (8+ 
   fixed-token chunks (500/1000, ~10% overlap, fences intact) with per-row
   panel + stats + numbered zip; Export all packs every done job (md +
   embedded assets + index) into one archive.
+- ✓ **Navigated preview + chunk visualization (The Cargo Manifest)** —
+  bounded section blocks, outline rail with scroll-spy, per-section copy,
+  molten scroll-driven level rail; chunk blocks with stamped dividers,
+  chunk rail (keyboard nav), per-chunk copy/download; the visible
+  Chunking off/on switch is the Flow A/B state machine (settings edits
+  re-chunk the selected job from in-memory markdown); mobile queue rows
+  redesigned (ms into the status line, two-tier actions with a More
+  strip).
 - ✓ **Chunker v2** — atomic tables (delimiter-confirmed, fence-priority,
   oversized-flag), exact token budgets via gpt-tokenizer (cl100k, lazy
   ~1 MB gz vocab, adaptive chars-per-token gate + trim-to-budget,

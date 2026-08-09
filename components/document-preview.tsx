@@ -99,9 +99,10 @@ export function DocumentPreview({
   }, []);
 
   const jumpTo = useCallback((selector: string) => {
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     paneRef.current
       ?.querySelector(selector)
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      ?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
   }, []);
 
   const onRailKeyDown = (event: React.KeyboardEvent) => {
@@ -131,7 +132,7 @@ export function DocumentPreview({
               onClick={() => jumpTo(`[data-chunk="${chunk.index}"]`)}
               aria-current={activeChunk === chunk.index ? "true" : undefined}
               className={cn(
-                "min-h-9 shrink-0 whitespace-nowrap rounded-full border px-3 font-mono text-[11px] transition-colors duration-150",
+                "min-h-10 shrink-0 whitespace-nowrap rounded-full border px-3 font-mono text-[11px] transition-colors duration-150",
                 activeChunk === chunk.index
                   ? "border-molten bg-molten/10 text-paper-foreground"
                   : "border-paper-line text-paper-muted hover:text-paper-foreground",
@@ -147,7 +148,7 @@ export function DocumentPreview({
               onClick={() => jumpTo(`[data-section="${section.id}"]`)}
               aria-current={activeOutlineId === section.id ? "true" : undefined}
               className={cn(
-                "min-h-9 shrink-0 whitespace-nowrap rounded-full border px-3 font-mono text-[11px] transition-colors duration-150",
+                "min-h-10 shrink-0 whitespace-nowrap rounded-full border px-3 font-mono text-[11px] transition-colors duration-150",
                 activeOutlineId === section.id
                   ? "border-molten bg-molten/10 text-paper-foreground"
                   : "border-paper-line text-paper-muted hover:text-paper-foreground",
@@ -173,7 +174,7 @@ export function DocumentPreview({
                     onClick={() => jumpTo(`[data-chunk="${chunk.index}"]`)}
                     aria-current={activeChunk === chunk.index ? "true" : undefined}
                     className={cn(
-                      "flex min-h-9 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-150",
+                      "flex min-h-10 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-150",
                       activeChunk === chunk.index
                         ? "bg-[#e4e8ea] font-medium text-paper-foreground"
                         : "text-paper-muted hover:text-paper-foreground",
@@ -195,7 +196,7 @@ export function DocumentPreview({
                     onClick={() => jumpTo(`[data-section="${section.id}"]`)}
                     aria-current={activeOutlineId === section.id ? "true" : undefined}
                     className={cn(
-                      "min-h-9 w-full truncate rounded-md px-2 py-1.5 text-left transition-colors duration-150",
+                      "min-h-10 w-full truncate rounded-md px-2 py-1.5 text-left transition-colors duration-150",
                       section.level === 0 && "font-mono text-[11px]",
                       activeOutlineId === section.id
                         ? "bg-[#e4e8ea] font-medium text-paper-foreground"
@@ -302,7 +303,7 @@ function SectionBlock({ section }: { section: DocSection }) {
           <Button
             variant="ghost"
             size="icon-sm"
-            className="min-h-9 min-w-9 text-paper-muted"
+            className="min-h-10 min-w-10 text-paper-muted"
             aria-label={`Copy section: ${section.text}`}
             title="Copy section"
             onClick={copySection}
@@ -371,7 +372,7 @@ function ChunkBlock({
           <Button
             variant="ghost"
             size="icon-sm"
-            className="min-h-9 min-w-9 text-paper-muted"
+            className="min-h-10 min-w-10 text-paper-muted"
             aria-label={`Copy chunk ${chunk.index}`}
             title="Copy chunk"
             onClick={copyChunk}
@@ -385,7 +386,7 @@ function ChunkBlock({
           <Button
             variant="ghost"
             size="icon-sm"
-            className="min-h-9 min-w-9 text-paper-muted"
+            className="min-h-10 min-w-10 text-paper-muted"
             aria-label={`Download chunk ${chunk.index} as .md`}
             title="Download chunk"
             onClick={downloadChunk}
