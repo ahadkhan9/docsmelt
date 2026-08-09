@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 import { Archive, Check, CircleAlert, Copy, Download, FileText, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarkdownView } from "./markdown";
+import { NavigatedPreview } from "./navigated-preview";
 import { refine, type ErrorKind } from "@/lib/converter/errors";
 import { FAMILY_OF, FAMILY_TOKEN, FamilyGlyph, supportsZip } from "@/lib/converter/formats";
 import type { JobView } from "@/lib/converter/useConverter";
@@ -164,30 +165,36 @@ export function IngotPreview({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
-          className="flex-1 overflow-y-auto scroll-thin bg-paper text-paper-foreground"
+          className="min-h-0 flex-1 overflow-hidden"
         >
-          <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
-            {huge ? (
-              <>
+          {huge ? (
+            <div className="h-full overflow-y-auto scroll-thin bg-paper text-paper-foreground">
+              <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
                 <p className="mb-4 rounded-lg border border-dashed border-paper-line bg-[#f1f3f4] px-3 py-2 font-mono text-xs text-paper-muted">
                   Large output — shown as raw text. Download the .md for the full file.
                 </p>
                 <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed">
                   {job.markdown}
                 </pre>
-              </>
-            ) : empty ? (
+              </div>
+            </div>
+          ) : empty ? (
+            <div className="flex h-full items-center justify-center bg-paper">
               <p className="font-mono text-sm text-paper-muted">
                 No text content was extracted.
               </p>
-            ) : tab === "rendered" ? (
-              <MarkdownView source={job.markdown} />
-            ) : (
-              <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed">
-                {job.markdown}
-              </pre>
-            )}
-          </div>
+            </div>
+          ) : tab === "rendered" ? (
+            <NavigatedPreview markdown={job.markdown} />
+          ) : (
+            <div className="h-full overflow-y-auto scroll-thin bg-paper text-paper-foreground">
+              <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
+                <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed">
+                  {job.markdown}
+                </pre>
+              </div>
+            </div>
+          )}
         </motion.div>
       ) : error ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-10 text-center">

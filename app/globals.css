@@ -219,3 +219,23 @@
     animation-iteration-count: 1 !important;
   }
 }
+
+/* The molten level rail — scroll-driven where supported (named timeline
+   on the pane), transform-only. The fallback is JS-driven (same scaleY). */
+@supports (animation-timeline: scroll()) {
+  .scroll-pane {
+    scroll-timeline-name: --pane;
+  }
+  @keyframes level-fill {
+    from {
+      transform: scaleY(0);
+    }
+    to {
+      transform: scaleY(1);
+    }
+  }
+  .level-rail-fill {
+    animation: level-fill auto linear;
+    animation-timeline: --pane;
+  }
+}
