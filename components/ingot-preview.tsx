@@ -142,7 +142,7 @@ export function IngotPreview({
             >
               <Download className="size-4" />
             </Button>
-            {supportsZip(job.format) && (
+            {supportsZip(job.format) && !job.restored && (
               <Button
                 variant="ghost"
                 size="icon-lg"

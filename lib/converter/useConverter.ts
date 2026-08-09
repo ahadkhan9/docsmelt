@@ -15,6 +15,7 @@ import { decodeText, detectPassThrough, type PassThroughKind } from "./passthrou
 import { buildExportZip, zipDocument } from "./zip";
 import { supportsZip } from "./formats";
 import { rangeSelect, toggleChecked } from "./selection";
+import { clearHistory, loadAll, recordFromJob, recordToJobView, saveRecord } from "./history";
 import { downloadBlob } from "@/lib/utils";
 
 let pool: ConverterPool | null = null;
@@ -38,6 +39,8 @@ export interface JobView {
   chars?: number;
   ms?: number;
   startedAt: number;
+  /** Restored from IndexedDB — the original file bytes are gone. */
+  restored?: boolean;
 }
 
 type JobKey = { poolJob?: number; cancelled: boolean };
@@ -56,7 +59,35 @@ export function useConverter() {
   const [exporting, setExporting] = useState(false);
   const [checked, setChecked] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [historyCount, setHistoryCount] = useState<number | null>(null);
   const checkAnchor = useRef<string | null>(null);
+
+  // Offer a restore banner once, if anything survived the last session.
+  useEffect(() => {
+    void loadAll()
+      .then((records) => {
+        if (records.length > 0) setHistoryCount(records.length);
+      })
+      .catch(() => {});
+  }, []);
+
+  const restoreHistory = useCallback(async (): Promise<number> => {
+    const records = await loadAll().catch(() => []);
+    if (records.length === 0) return 0;
+    const views = records.map(recordToJobView);
+    for (const view of views) keysRef.current.set(view.id, { cancelled: false });
+    setJobs((list) => [...views, ...list]);
+    setSelectedId(views[0]?.id ?? null);
+    setHistoryCount(null);
+    return views.length;
+  }, []);
+
+  const dismissHistory = useCallback(() => setHistoryCount(null), []);
+
+  const clearHistoryStore = useCallback(async () => {
+    await clearHistory().catch(() => {});
+    setHistoryCount(null);
+  }, []);
 
   const keysRef = useRef(new Map<string, JobKey>());
   const jobsRef = useRef<JobView[]>([]);
@@ -66,6 +97,23 @@ export function useConverter() {
 
   const setJob = useCallback((id: string, patch: Partial<JobView>) => {
     setJobs((list) => list.map((j) => (j.id === id ? { ...j, ...patch } : j)));
+  }, []);
+
+  /** Persist a finished job to IndexedDB; surface honest cap trimming. */
+  const persistDone = useCallback((view: JobView) => {
+    const record = recordFromJob(view);
+    if (!record) return;
+    void saveRecord(record)
+      .then((evicted) => {
+        if (evicted > 0) {
+          setNotice(
+            `History trimmed — ${evicted} oldest conversion${evicted === 1 ? "" : "s"} removed to stay under the 50 MB cap.`,
+          );
+        }
+      })
+      .catch(() => {
+        // history is a bonus; storage failures are silent
+      });
   }, []);
 
   /** Load the engine on demand. Safe to call concurrently (pool dedupes). */
@@ -94,12 +142,15 @@ export function useConverter() {
       const passThrough = detectPassThrough(view.file.name, bytes);
       if (passThrough) {
         const markdown = decodeText(bytes);
-        setJob(view.id, {
+        const updated: JobView = {
+          ...view,
           status: "done",
           kind: passThrough,
           markdown,
           chars: markdown.length,
-        });
+        };
+        setJob(view.id, updated);
+        persistDone(updated);
         setSelectedId((s) => s ?? view.id);
         return;
       }
@@ -133,13 +184,16 @@ export function useConverter() {
       if (key.cancelled) return;
       if (res.ok) {
         const markdown = res.result as string;
-        setJob(view.id, {
+        const updated: JobView = {
+          ...view,
           status: "done",
           format: res.format,
           markdown,
           chars: markdown.length,
           ms: Math.max(1, Math.round(performance.now() - started)),
-        });
+        };
+        setJob(view.id, updated);
+        persistDone(updated);
         setSelectedId((s) => s ?? view.id);
       } else {
         setJob(view.id, { status: "failed", code: res.code, message: res.message });
@@ -266,6 +320,7 @@ export function useConverter() {
   const downloadZip = useCallback(async (id: string) => {
     const view = jobsRef.current.find((j) => j.id === id);
     if (!view?.format || !view.markdown) return;
+    if (view.restored) return; // the original file bytes are gone
     if (view.status === "packing") return; // already packing — no double runs
     const key = keysRef.current.get(id);
     if (!key) return;
@@ -376,10 +431,11 @@ export function useConverter() {
 
   return {
     jobs, selected, engine, now, exporting,
-    checked, notice,
+    checked, notice, historyCount,
     addFiles, cancel, remove, retry, clearFinished,
     exportAll, exportChecked, deleteChecked, copyChecked,
     toggleCheck, clearChecked,
+    restoreHistory, dismissHistory, clearHistoryStore,
     downloadMarkdown, downloadZip, select: setSelectedId,
     activeCount,
   };

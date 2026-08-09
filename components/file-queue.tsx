@@ -353,7 +353,7 @@ function QueueRow({
               <Button variant="ghost" size="icon-lg" className="min-h-11 min-w-11" aria-label="Download .md" title="Download .md" onClick={onDownloadMd}>
                 <Download className="size-4" />
               </Button>
-              {supportsZip(job.format) && (
+              {supportsZip(job.format) && !job.restored && (
                 <Button variant="ghost" size="icon-lg" className="min-h-11 min-w-11" aria-label="Download .zip with images" title="Download .zip" onClick={onDownloadZip}>
                   <Archive className="size-4" />
                 </Button>

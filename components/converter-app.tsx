@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { MotionConfig } from "motion/react";
 import { Lock } from "lucide-react";
 import { refine, type ErrorKind } from "@/lib/converter/errors";
+import { Button } from "@/components/ui/button";
 import { useConverter } from "@/lib/converter/useConverter";
 import { FurnaceDropzone } from "./furnace-dropzone";
 import { FileQueue } from "./file-queue";
@@ -74,6 +75,30 @@ export default function ConverterApp() {
           </div>
         </header>
 
+        {c.historyCount !== null && c.historyCount > 0 && (
+          <div className="border-b border-border/60 bg-card/60">
+            <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 sm:px-6">
+              <p className="font-mono text-[11px] text-steel">
+                Restore previous session — {c.historyCount} converted file
+                {c.historyCount === 1 ? "" : "s"} stored locally.
+              </p>
+              <div className="ml-auto flex items-center gap-1">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="min-h-10"
+                  onClick={() => void c.restoreHistory()}
+                >
+                  Restore
+                </Button>
+                <Button variant="ghost" size="sm" className="min-h-10" onClick={c.dismissHistory}>
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 pb-16 pt-6 sm:px-6 sm:pt-10">
           {hasJobs ? (
             <div className="flex flex-col gap-5">
@@ -133,7 +158,21 @@ export default function ConverterApp() {
                 </a>{" "}
                 · Engine: Firecrawl AnyDoc (MIT) · WebAssembly
               </p>
-              <p>No server · no uploads · no accounts</p>
+              <p>
+                No server · no uploads · no accounts
+                {c.historyCount !== null && (
+                  <>
+                    {" · "}
+                    <button
+                      type="button"
+                      className="underline underline-offset-2 hover:text-foreground"
+                      onClick={() => void c.clearHistoryStore()}
+                    >
+                      Clear history
+                    </button>
+                  </>
+                )}
+              </p>
             </div>
           </div>
         </footer>
