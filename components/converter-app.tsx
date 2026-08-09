@@ -52,7 +52,7 @@ export default function ConverterApp() {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-16 pt-6 sm:px-6 sm:pt-10">
+        <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 pb-16 pt-6 sm:px-6 sm:pt-10">
           {hasJobs ? (
             <div className="flex flex-col gap-5">
               <FurnaceDropzone compact engine={c.engine} onFiles={c.addFiles} />

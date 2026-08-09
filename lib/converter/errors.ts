@@ -9,7 +9,7 @@ export type ErrorKind = ConvertErrorCode | "engine" | "fileTooLarge";
 
 export const ERROR_UX: Record<ErrorKind, { title: string; hint: string }> = {
   unsupported: {
-    title: "We can't smelt this file",
+    title: "We can’t smelt this file",
     hint: "The format is unrecognized or unsupported. CSV needs a .csv name; text-based PDFs work, scanned ones need OCR.",
   },
   malformed: {
@@ -34,7 +34,7 @@ export const ERROR_UX: Record<ErrorKind, { title: string; hint: string }> = {
   },
   fileTooLarge: {
     title: "File too large for in-browser conversion",
-    hint: "The cap is 100 MB on desktop and 40 MB on mobile, because your browser's memory is the limit. Try a smaller file.",
+    hint: "The cap is 100 MB on desktop and 40 MB on mobile, because your browser’s memory is the limit. Try a smaller file.",
   },
 };
 

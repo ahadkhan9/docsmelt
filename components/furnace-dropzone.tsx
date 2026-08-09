@@ -107,7 +107,7 @@ export function FurnaceDropzone({
         onDrop={onDrop}
         onClick={openPicker}
         className={cn(
-          "relative cursor-pointer overflow-hidden rounded-xl border bg-card outline-none transition-colors duration-200",
+          "relative cursor-pointer select-none overflow-hidden rounded-xl border bg-card outline-none transition-colors duration-200",
           dragActive ? "border-molten" : "border-border",
         )}
       >
@@ -157,7 +157,7 @@ export function FurnaceDropzone({
       onDrop={onDrop}
       onClick={openPicker}
       className={cn(
-        "relative cursor-pointer overflow-hidden rounded-2xl border bg-card outline-none transition-colors duration-200",
+        "relative cursor-pointer select-none overflow-hidden rounded-2xl border bg-card outline-none transition-colors duration-200",
         dragActive ? "border-molten" : "border-border",
       )}
     >
@@ -166,7 +166,7 @@ export function FurnaceDropzone({
         <p className="font-mono text-xs uppercase tracking-[0.3em] text-muted-foreground">
           Feed the furnace
         </p>
-        <h1 className="mt-4 max-w-2xl font-display text-4xl font-semibold text-foreground sm:text-5xl">
+        <h1 className="mt-4 max-w-2xl text-balance font-display text-4xl font-semibold text-foreground sm:text-5xl">
           Smelt documents into markdown.
         </h1>
         <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-steel">
@@ -209,7 +209,7 @@ export function FurnaceDropzone({
               <div className="h-full w-1/3 rounded-full bg-molten animate-shimmer" />
             </div>
             <p className="mt-2.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-              Firing up — loading the conversion engine (one-time, ~6 MB)
+              Firing up — loading the conversion engine (one-time, ~6&nbsp;MB)
             </p>
           </div>
         )}

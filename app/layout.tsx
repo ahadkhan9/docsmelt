@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Big_Shoulders, IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -27,13 +27,26 @@ export const metadata: Metadata = {
     "Convert PDF, DOCX, XLSX, PPTX, RTF, EPUB, ODS and CSV into clean Markdown, entirely in your browser. Files never leave your device.",
 };
 
+export const viewport: Viewport = {
+  themeColor: "#101418",
+  colorScheme: "dark",
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
       className={`${display.variable} ${sans.variable} ${mono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col touch-manipulation">
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-card focus:px-4 focus:py-2 focus:font-mono focus:text-sm focus:text-foreground focus:shadow-lg focus:outline-2 focus:outline-molten"
+        >
+          Skip to content
+        </a>
+        {children}
+      </body>
     </html>
   );
 }

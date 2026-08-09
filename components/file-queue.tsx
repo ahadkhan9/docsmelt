@@ -152,7 +152,7 @@ function QueueRow({
       aria-label={`${job.file.name} — ${job.status}`}
       onClick={onSelect}
       className={cn(
-        "relative cursor-pointer px-4 py-3 transition-colors duration-150",
+        "relative cursor-pointer px-4 py-3 transition-colors duration-150 [content-visibility:auto]",
         selected ? "bg-accent/60" : "hover:bg-accent/30",
       )}
     >
