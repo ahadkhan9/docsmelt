@@ -40,6 +40,18 @@ describe("format identity system", () => {
     expect(new Set(Object.values(FAMILY_TOKEN)).size).toBe(5);
   });
 
+  it("covers all 21 engine formats", () => {
+    expect(Object.keys(FAMILY_OF).length).toBe(21);
+    expect(Object.keys(EXT_TO_FORMAT).length).toBe(21);
+  });
+
+  it("covers the legacy binary formats the engine reads via OLE", () => {
+    for (const legacy of ["doc", "docm", "ppt", "pps", "pot", "pptm", "ppsx", "ppsm", "xls", "xlsm", "xlsb"]) {
+      expect(FAMILY_OF[legacy as AnyFormat], legacy).toBeDefined();
+      expect(EXT_TO_FORMAT[legacy], legacy).toBe(legacy);
+    }
+  });
+
   it("resolves formats from file names (extension fallback)", () => {
     expect(formatFromFileName("REPORT.DOCX")).toBe("docx");
     expect(formatFromFileName("notes.pdf")).toBe("pdf");
