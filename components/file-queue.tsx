@@ -9,6 +9,7 @@ import {
   Download,
   FileQuestion,
   FileText,
+  MoreHorizontal,
   RotateCcw,
   Scissors,
   Trash2,
@@ -231,6 +232,7 @@ function QueueRow({
   onDownloadZip: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [chunkOpen, setChunkOpen] = useState(false);
   const [chunkSize, setChunkSize] = useState<256 | 512 | 1024>(512);
   const [customTokens, setCustomTokens] = useState("");
@@ -304,6 +306,73 @@ function QueueRow({
     }
   };
 
+
+  /** Row actions in primary-first order. `labeled` renders the mobile
+   *  strip variant (icon + text, 44px targets); icon-only otherwise. */
+  const buildActions = (labeled: boolean) => {
+    const cls = labeled ? "min-h-11" : "min-h-11 min-w-11";
+    const iconCls = labeled ? "size-4" : "size-4";
+    const withLabel = (icon: React.ReactNode, label: string) => (
+      <>
+        {icon}
+        {label}
+      </>
+    );
+    const stop = (handler: () => void) => (e: React.MouseEvent) => {
+      e.stopPropagation();
+      handler();
+    };
+    if (active) {
+      return [
+        <Button key="cancel" variant="ghost" className={cls} aria-label={`Cancel ${job.file.name}`} title="Cancel" onClick={stop(onCancel)}>
+          {labeled ? withLabel(<X className={iconCls} aria-hidden />, "Cancel") : <X className={iconCls} />}
+        </Button>,
+      ];
+    }
+    if (job.status === "done") {
+      return [
+        <Button key="md" variant="ghost" className={cls} aria-label="Download .md" title="Download .md" onClick={stop(onDownloadMd)}>
+          {labeled ? withLabel(<Download className={iconCls} aria-hidden />, "Download .md") : <Download className={iconCls} />}
+        </Button>,
+        <Button key="copy" variant="ghost" className={cls} aria-label="Copy markdown" title="Copy markdown" onClick={stop(copy)}>
+          {labeled
+            ? withLabel(copied ? <Check className={iconCls} aria-hidden /> : <Copy className={iconCls} aria-hidden />, copied ? "Copied" : "Copy")
+            : copied
+              ? <Check className={iconCls} />
+              : <Copy className={iconCls} />}
+        </Button>,
+        ...(supportsZip(job.format) && !job.restored
+          ? [
+              <Button key="zip" variant="ghost" className={cls} aria-label="Download .zip with images" title="Download .zip" onClick={stop(onDownloadZip)}>
+                {labeled ? withLabel(<Archive className={iconCls} aria-hidden />, "Download .zip") : <Archive className={iconCls} />}
+              </Button>,
+            ]
+          : []),
+        <Button key="chunk" variant="ghost" className={cls} aria-label="Chunk for RAG" title="Chunk for RAG" aria-expanded={chunkOpen} onClick={stop(chunkOpen ? () => setChunkOpen(false) : openChunks)}>
+          {labeled ? withLabel(<Scissors className={iconCls} aria-hidden />, "Chunk for RAG") : <Scissors className={iconCls} />}
+        </Button>,
+        <Button key="remove" variant="ghost" className={cls} aria-label="Remove from queue" title="Remove" onClick={stop(onRemove)}>
+          {labeled ? withLabel(<Trash2 className={iconCls} aria-hidden />, "Remove") : <Trash2 className={iconCls} />}
+        </Button>,
+      ];
+    }
+    if (job.status === "failed") {
+      return [
+        <Button key="retry" variant="ghost" className={cls} aria-label="Retry" title="Retry" onClick={stop(onRetry)}>
+          {labeled ? withLabel(<RotateCcw className={iconCls} aria-hidden />, "Retry") : <RotateCcw className={iconCls} />}
+        </Button>,
+        <Button key="remove" variant="ghost" className={cls} aria-label="Remove" title="Remove" onClick={stop(onRemove)}>
+          {labeled ? withLabel(<Trash2 className={iconCls} aria-hidden />, "Remove") : <Trash2 className={iconCls} />}
+        </Button>,
+      ];
+    }
+    return [
+      <Button key="remove" variant="ghost" className={cls} aria-label="Remove" title="Remove" onClick={stop(onRemove)}>
+        {labeled ? withLabel(<Trash2 className={iconCls} aria-hidden />, "Remove") : <Trash2 className={iconCls} />}
+      </Button>,
+    ];
+  };
+
   return (
     <motion.li
       layout
@@ -367,73 +436,45 @@ function QueueRow({
               </span>
             ) : null}
           </div>
-          <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+          <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
             {formatSize(job.file.size)}
+            {job.status === "done"
+              ? job.kind
+                ? " · already markdown"
+                : ` · ${job.ms} ms`
+              : ""}
             {active && job.status === "smelting" ? ` · ${elapsed}s` : ""}
           </p>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
-          {active ? (
+        <div className="hidden items-center gap-0.5 sm:flex" onClick={(e) => e.stopPropagation()}>
+          {buildActions(false)}
+        </div>
+        <div className="flex items-center gap-1 sm:hidden" onClick={(e) => e.stopPropagation()}>
+          {buildActions(false)[0]}
+          {buildActions(false).length > 1 && (
             <Button
               variant="ghost"
               size="icon-lg"
               className="min-h-11 min-w-11"
-              aria-label={`Cancel ${job.file.name}`}
-              title="Cancel"
-              onClick={onCancel}
+              aria-label="More actions"
+              title="More actions"
+              aria-expanded={actionsOpen}
+              onClick={() => setActionsOpen((open) => !open)}
             >
-              <X className="size-4" />
-            </Button>
-          ) : job.status === "done" ? (
-            <>
-              <span
-                className="mr-1 font-mono text-[11px] text-fam-sheet"
-                title={job.kind ? "no conversion needed" : `${job.ms} ms`}
-              >
-                {job.kind ? "already markdown" : `${job.ms} ms`}
-              </span>
-              <Button variant="ghost" size="icon-lg" className="min-h-11 min-w-11" aria-label="Copy markdown" title="Copy markdown" onClick={copy}>
-                {copied ? <Check className="size-4 text-fam-sheet" /> : <Copy className="size-4" />}
-              </Button>
-              <Button variant="ghost" size="icon-lg" className="min-h-11 min-w-11" aria-label="Download .md" title="Download .md" onClick={onDownloadMd}>
-                <Download className="size-4" />
-              </Button>
-              {supportsZip(job.format) && !job.restored && (
-                <Button variant="ghost" size="icon-lg" className="min-h-11 min-w-11" aria-label="Download .zip with images" title="Download .zip" onClick={onDownloadZip}>
-                  <Archive className="size-4" />
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="icon-lg"
-                className="min-h-11 min-w-11"
-                aria-label="Chunk for RAG"
-                title="Chunk for RAG"
-                aria-expanded={chunkOpen}
-                onClick={chunkOpen ? () => setChunkOpen(false) : openChunks}
-              >
-                <Scissors className="size-4" />
-              </Button>
-              <Button variant="ghost" size="icon-lg" className="min-h-11 min-w-11" aria-label="Remove from queue" title="Remove" onClick={onRemove}>
-                <Trash2 className="size-4" />
-              </Button>
-            </>
-          ) : job.status === "failed" ? (
-            <>
-              <Button variant="ghost" size="icon-lg" className="min-h-11 min-w-11" aria-label="Retry" title="Retry" onClick={onRetry}>
-                <RotateCcw className="size-4" />
-              </Button>
-              <Button variant="ghost" size="icon-lg" className="min-h-11 min-w-11" aria-label="Remove" title="Remove" onClick={onRemove}>
-                <Trash2 className="size-4" />
-              </Button>
-            </>
-          ) : (
-            <Button variant="ghost" size="icon-lg" className="min-h-11 min-w-11" aria-label="Remove" title="Remove" onClick={onRemove}>
-              <Trash2 className="size-4" />
+              <MoreHorizontal className="size-4" />
             </Button>
           )}
         </div>
       </div>
+
+      {actionsOpen && (
+        <div
+          className="mt-2 flex flex-wrap items-center gap-1 border-t border-border/60 pt-2 sm:hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {buildActions(true)}
+        </div>
+      )}
 
       {error && (
         <div className="mt-2 rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2">
