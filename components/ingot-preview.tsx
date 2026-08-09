@@ -45,17 +45,23 @@ export function IngotPreview({
     return (
       <div className="flex min-h-[480px] flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card px-6 text-center lg:h-[600px]">
         <p className="font-display text-2xl font-semibold text-muted-foreground">
-          The ingot waits.
+          Select a converted file.
         </p>
         <p className="max-w-sm font-mono text-xs leading-relaxed text-muted-foreground">
-          Convert a document — its markdown lands here, rendered or raw.
+          Its markdown lands here — rendered or raw.
         </p>
       </div>
     );
   }
 
   const family = job.format ? FAMILY_OF[job.format] : undefined;
-  const active = job.status === "queued" || job.status === "detecting" || job.status === "smelting" || job.status === "packing";
+  const active =
+    job.status === "queued" || job.status === "detecting" || job.status === "smelting" ||
+    job.status === "packing";
+  // Large markdown would freeze react-markdown's synchronous parse on the
+  // main thread — show raw text instead (the .md download has it all).
+  const huge = (job.markdown?.length ?? 0) > 1_000_000;
+  const empty = job.status === "done" && (job.chars ?? 0) === 0;
   const error =
     job.status === "failed"
       ? refine(job.file.name, job.format, (job.code ?? "engine") as ErrorKind)
@@ -74,8 +80,8 @@ export function IngotPreview({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-foreground">{job.file.name}</p>
           <p className="font-mono text-[11px] text-muted-foreground">
-            {job.status === "done"
-              ? `${(job.chars ?? 0).toLocaleString()} chars · ${job.ms} ms`
+            {job.markdown
+              ? `${(job.chars ?? 0).toLocaleString()} chars${job.ms ? ` · ${job.ms} ms` : ""}`
               : active
                 ? job.status === "smelting"
                   ? "smelting…"
@@ -84,28 +90,30 @@ export function IngotPreview({
             {job.format ? ` · ${job.format}` : ""}
           </p>
         </div>
-        {job.status === "done" && (
+        {job.markdown && (
           <>
-            <div
-              className="flex rounded-lg border border-border bg-background p-0.5"
-              role="tablist"
-              aria-label="Preview mode"
-            >
-              {(["rendered", "raw"] as const).map((t) => (
-                <button
-                  key={t}
-                  role="tab"
-                  aria-selected={tab === t}
-                  onClick={() => setTab(t)}
-                  className={cn(
-                    "min-h-8 rounded-md px-2.5 font-mono text-[11px] uppercase tracking-wide transition-colors duration-150",
-                    tab === t ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
+            {!huge && (
+              <div
+                className="flex rounded-lg border border-border bg-background p-0.5"
+                role="tablist"
+                aria-label="Preview mode"
+              >
+                {(["rendered", "raw"] as const).map((t) => (
+                  <button
+                    key={t}
+                    role="tab"
+                    aria-selected={tab === t}
+                    onClick={() => setTab(t)}
+                    className={cn(
+                      "min-h-10 rounded-md px-3 font-mono text-[11px] uppercase tracking-wide transition-colors duration-150",
+                      tab === t ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
             <Button
               variant="ghost"
               size="icon-lg"
@@ -142,7 +150,7 @@ export function IngotPreview({
         )}
       </div>
 
-      {job.status === "done" && job.markdown ? (
+      {job.markdown ? (
         <motion.div
           key={job.id}
           initial={{ opacity: 0 }}
@@ -151,7 +159,20 @@ export function IngotPreview({
           className="flex-1 overflow-y-auto scroll-thin bg-paper text-paper-foreground"
         >
           <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
-            {tab === "rendered" ? (
+            {huge ? (
+              <>
+                <p className="mb-4 rounded-lg border border-dashed border-paper-line bg-[#f1f3f4] px-3 py-2 font-mono text-xs text-paper-muted">
+                  Large output — shown as raw text. Download the .md for the full file.
+                </p>
+                <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed">
+                  {job.markdown}
+                </pre>
+              </>
+            ) : empty ? (
+              <p className="font-mono text-sm text-paper-muted">
+                No text content was extracted.
+              </p>
+            ) : tab === "rendered" ? (
               <MarkdownView source={job.markdown} />
             ) : (
               <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed">

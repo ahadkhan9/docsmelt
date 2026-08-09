@@ -186,6 +186,7 @@ export function useConverter() {
   const downloadZip = useCallback(async (id: string) => {
     const view = jobsRef.current.find((j) => j.id === id);
     if (!view?.format || !view.markdown) return;
+    if (view.status === "packing") return; // already packing — no double runs
     const key = keysRef.current.get(id);
     if (!key) return;
     setJob(id, { status: "packing" });

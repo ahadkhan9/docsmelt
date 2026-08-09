@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MotionConfig } from "motion/react";
 import { Lock } from "lucide-react";
+import { refine, type ErrorKind } from "@/lib/converter/errors";
 import { useConverter } from "@/lib/converter/useConverter";
 import { FurnaceDropzone } from "./furnace-dropzone";
 import { FileQueue } from "./file-queue";
@@ -27,9 +28,10 @@ export default function ConverterApp() {
     if (key === lastKey.current) return;
     lastKey.current = key;
     if (last.status === "done") setAnnouncement(`Converted ${last.file.name}.`);
-    else if (last.status === "failed")
-      setAnnouncement(`${last.file.name}: ${last.code ?? "conversion failed"}.`);
-    else setAnnouncement(`Cancelled ${last.file.name}.`);
+    else if (last.status === "failed") {
+      const title = refine(last.file.name, last.format, (last.code ?? "engine") as ErrorKind).title;
+      setAnnouncement(`${last.file.name}: ${title}.`);
+    } else setAnnouncement(`Cancelled ${last.file.name}.`);
   }, [c.jobs]);
 
   return (
@@ -38,7 +40,10 @@ export default function ConverterApp() {
         <header className="border-b border-border/60">
           <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
             <div className="flex items-baseline gap-2.5">
-              <span className="font-display text-2xl font-bold tracking-wide text-foreground">
+              <span
+                translate="no"
+                className="font-display text-2xl font-bold tracking-wide text-foreground"
+              >
                 DOC<span className="text-molten">SMELT</span>
               </span>
               <span className="hidden font-mono text-[11px] uppercase tracking-widest text-muted-foreground md:inline">
