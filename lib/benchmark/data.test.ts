@@ -1,7 +1,7 @@
 /**
- * Benchmark data integrity — the /benchmark page must show real measured
- * numbers, never placeholders: every entry positive, plausible, and tied
- * to an existing sample file.
+ * Benchmark data integrity — kept as a committed record of engine
+ * performance: every entry positive, plausible, and tied to an existing
+ * sample file (regenerate with scripts/benchmark.mjs).
  */
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";

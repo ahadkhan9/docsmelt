@@ -29,7 +29,6 @@ Drop a document on the page and it converts to clean, GitHub-flavored Markdown w
 - **Keyboard-first.** `⌘O` open, `⌘⇧V` paste, `⌘D` download, `Esc` cancel/clear, `1–9` select rows.
 - **Honest errors.** The engine's error taxonomy (`unsupported`, `malformed`, `encrypted`, `resourceLimit`, `missingPart`) maps to copy that names the problem and the way out — including a dedicated "scanned PDF needs OCR" hint.
 - **Every format is designed-for.** Each format family has its own color and glyph, shown as a badge before conversion even starts.
-- **Measured, not promised.** A [benchmark page](https://docsmelt.vercel.app/benchmark) reports real median conversion times from the actual wasm binary.
 
 ## Supported formats
 

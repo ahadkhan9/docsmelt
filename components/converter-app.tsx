@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { motion, MotionConfig } from "motion/react";
 import { Lock, X } from "lucide-react";
 import { ANNOUNCE_EVENT } from "@/lib/announce";
@@ -212,7 +211,7 @@ export default function ConverterApp() {
     <MotionConfig reducedMotion="user">
       <div className="flex min-h-dvh flex-col">
         <header className="border-b border-border/60">
-          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
+          <div className="mx-auto flex h-14 max-w-app items-center justify-between px-4 sm:px-6">
             <div className="flex items-baseline gap-2.5">
               <span
                 translate="no"
@@ -233,7 +232,7 @@ export default function ConverterApp() {
 
         {c.historyCount !== null && c.historyCount > 0 && (
           <div className="border-b border-border/60 bg-card/60">
-            <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 sm:px-6">
+            <div className="mx-auto flex max-w-app flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 sm:px-6">
               <p className="font-mono text-[11px] text-steel">
                 Restore previous session — {c.historyCount} converted file
                 {c.historyCount === 1 ? "" : "s"} stored locally.
@@ -255,7 +254,7 @@ export default function ConverterApp() {
           </div>
         )}
 
-        <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 pb-16 pt-6 sm:px-6 sm:pt-10">
+        <main id="main" className="mx-auto w-full max-w-app flex-1 px-4 pb-16 pt-6 sm:px-6 sm:pt-10">
           {hasJobs ? (
             <div className="flex flex-col gap-5">
               <FurnaceDropzone compact engine={c.engine} onFiles={c.addFiles} pickerRef={pickerRef} />
@@ -330,7 +329,7 @@ export default function ConverterApp() {
         </main>
 
         <footer className="border-t border-border/60">
-          <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5 sm:px-6 md:flex-row md:items-center md:justify-between">
+          <div className="mx-auto flex max-w-app flex-col gap-3 px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5 sm:px-6 md:flex-row md:items-center md:justify-between">
             <div className="shortcuts-hint flex flex-wrap items-center gap-x-4 gap-y-1.5 font-mono text-[11px] text-muted-foreground">
               <span>
                 <kbd className="kbd">⌘O</kbd> open
@@ -352,12 +351,16 @@ export default function ConverterApp() {
               <span className="whitespace-nowrap">Engine: Firecrawl AnyDoc (MIT) · WebAssembly</span>
               <span aria-hidden className="hidden text-border sm:inline">·</span>
               <span className="hidden sm:inline">No server · no uploads · no accounts</span>
-              <Link
-                href="/benchmark"
-                className="rounded px-1 py-0.5 underline underline-offset-2 hover:text-foreground"
+              <span aria-hidden className="hidden text-border sm:inline">·</span>
+              <a
+                href="https://ahad.works"
+                target="_blank"
+                rel="noopener noreferrer"
+                translate="no"
+                className="rounded px-1 py-0.5 font-mono text-[11px] tracking-wider text-foreground underline underline-offset-2 transition-colors duration-150 hover:text-molten"
               >
-                Benchmarks
-              </Link>
+                Ahad<span className="text-molten">.works</span>
+              </a>
               {c.historyCount !== null && (
                 <button
                   type="button"

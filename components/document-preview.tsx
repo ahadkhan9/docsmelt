@@ -282,7 +282,7 @@ export function DocumentPreview({
           ref={paneRef}
           className="scroll-pane relative flex-1 overflow-y-auto overscroll-contain scroll-thin scroll-thin-on-paper [scrollbar-gutter:stable] bg-paper text-paper-foreground"
         >
-          <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
+          <div className="mx-auto max-w-4xl px-5 py-8 sm:px-8">
             {chunkMode && chunks ? (
               <>
                 {summary && (

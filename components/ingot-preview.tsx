@@ -243,7 +243,7 @@ export function IngotPreview({
         >
           {huge ? (
             <div className="h-full overflow-y-auto scroll-thin scroll-thin-on-paper [scrollbar-gutter:stable] bg-paper text-paper-foreground">
-              <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
+              <div className="mx-auto max-w-4xl px-5 py-8 sm:px-8">
                 <p className="mb-4 rounded-lg border border-dashed border-paper-line bg-paper-chip px-3 py-2 font-mono text-xs text-paper-muted">
                   Large output — shown as raw text. Download the .md for the full file.
                 </p>
@@ -269,7 +269,7 @@ export function IngotPreview({
             />
           ) : (
             <div className="h-full overflow-y-auto scroll-thin scroll-thin-on-paper [scrollbar-gutter:stable] bg-paper text-paper-foreground">
-              <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
+              <div className="mx-auto max-w-4xl px-5 py-8 sm:px-8">
                 <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed">
                   {job.markdown}
                 </pre>
