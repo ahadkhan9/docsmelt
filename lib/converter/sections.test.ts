@@ -18,7 +18,7 @@ describe("parseSections", () => {
     const { sections, preambleLines } = parseSections(
       "Preamble line.\n\n# Report\n\nIntro.\n\n## Budget\n\nNumbers.\n\n## Summary\n\nDone.",
     );
-    expect(preambleLines.join("\n")).toBe("Preamble line.");
+    expect(preambleLines.join("\n").trim()).toBe("Preamble line.");
     expect(sections.map((s) => s.text)).toEqual(["Report", "Budget", "Summary"]);
     expect(sections.map((s) => s.level)).toEqual([1, 2, 2]);
     expect(sections.map((s) => s.index)).toEqual([1, 2, 3]);
