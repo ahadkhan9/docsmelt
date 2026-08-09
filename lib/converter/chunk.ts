@@ -479,7 +479,12 @@ export async function chunkMarkdownAsync(
   options: ChunkOptions,
 ): Promise<ChunkResult> {
   if (shouldChunkInWorker(markdown.length, typeof Worker !== "undefined")) {
-    return runInChunkWorker(markdown, options);
+    try {
+      return await runInChunkWorker(markdown, options);
+    } catch {
+      // Worker failed to load or run (deploy-swap window, offline, CSP) —
+      // fall back to the main-thread path instead of failing the caller.
+    }
   }
   const tokenizer = await loadTokenizer();
   return { chunks: chunkMarkdown(markdown, options, tokenizer), encoding: tokenizer.encoding };

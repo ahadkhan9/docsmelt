@@ -22,6 +22,7 @@ import {
   resolveChunkOptions,
   type RagChunk,
 } from "@/lib/converter/chunk";
+import { CHUNK_PANEL_ERROR, chunkPanelVisible } from "@/lib/converter/chunk-panel";
 import { refine, type ErrorKind } from "@/lib/converter/errors";
 import { FAMILY_OF, FAMILY_TOKEN, FamilyGlyph, supportsZip } from "@/lib/converter/formats";
 import type { JobView } from "@/lib/converter/useConverter";
@@ -241,6 +242,7 @@ function QueueRow({
   const [chunks, setChunks] = useState<RagChunk[] | null>(null);
   const [encoding, setEncoding] = useState("cl100k_base");
   const [chunkLoading, setChunkLoading] = useState(false);
+  const [chunkError, setChunkError] = useState<string | null>(null);
   const family = job.format ? FAMILY_OF[job.format] : undefined;
 
   const computeChunks = async () => {
@@ -258,6 +260,11 @@ function QueueRow({
       const result = await chunkMarkdownAsync(job.markdown, options);
       setEncoding(result.encoding);
       setChunks(result.chunks);
+      setChunkError(null);
+    } catch {
+      // A failure must NEVER collapse the panel (the regression this fix
+      // pins): the error state keeps it visible with an honest message.
+      setChunkError(CHUNK_PANEL_ERROR);
     } finally {
       setChunkLoading(false);
     }
@@ -265,6 +272,7 @@ function QueueRow({
   const openChunks = () => {
     if (!job.markdown) return;
     if (globalPreset) setChunkSize(globalPreset as 256 | 512 | 1024);
+    setChunkError(null);
     setChunkOpen(true);
     void computeChunks();
   };
@@ -482,7 +490,7 @@ function QueueRow({
           <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{error.hint}</p>
         </div>
       )}
-      {(chunkOpen && (chunks || chunkLoading)) && (
+      {chunkPanelVisible(chunkOpen, chunks !== null, chunkLoading, chunkError !== null) && (
         <motion.div
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
@@ -532,6 +540,8 @@ function QueueRow({
               <span className="font-mono text-[11px] text-muted-foreground">
                 loading tokenizer…
               </span>
+            ) : chunkError ? (
+              <span className="font-mono text-[11px] text-destructive">{chunkError}</span>
             ) : (
               <span className="font-mono text-[11px] text-steel">
                 {chunks?.length ?? 0} chunk{chunks?.length === 1 ? "" : "s"} · ~
