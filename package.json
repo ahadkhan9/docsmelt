@@ -6,7 +6,8 @@
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "benchmark": "node scripts/benchmark.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

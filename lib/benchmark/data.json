@@ -1,0 +1,63 @@
+{
+  "generated": "2026-08-09",
+  "engine": "anydoc-wasm 0.1.7",
+  "runsPerSample": 20,
+  "samples": {
+    "docx": {
+      "file": "sample.docx",
+      "detected": "docx",
+      "medianMs": 0.17,
+      "minMs": 0.09,
+      "chars": 112,
+      "runs": 20
+    },
+    "xlsx": {
+      "file": "sample.xlsx",
+      "detected": "xlsx",
+      "medianMs": 0.26,
+      "minMs": 0.2,
+      "chars": 70,
+      "runs": 20
+    },
+    "epub": {
+      "file": "sample.epub",
+      "detected": "epub",
+      "medianMs": 0.19,
+      "minMs": 0.16,
+      "chars": 56,
+      "runs": 20
+    },
+    "csv": {
+      "file": "sample.csv",
+      "detected": "csv",
+      "medianMs": 0.84,
+      "minMs": 0.67,
+      "chars": 68,
+      "runs": 20
+    },
+    "rtf": {
+      "file": "sample.rtf",
+      "detected": "rtf",
+      "medianMs": 0.05,
+      "minMs": 0.05,
+      "chars": 26,
+      "runs": 20
+    },
+    "pdf": {
+      "file": "sample.pdf",
+      "detected": "pdf",
+      "medianMs": 0.35,
+      "minMs": 0.31,
+      "chars": 22,
+      "runs": 20
+    },
+    "docx (image)": {
+      "file": "sample-image.docx",
+      "detected": "docx",
+      "medianMs": 0.19,
+      "minMs": 0.17,
+      "chars": 17,
+      "runs": 20
+    }
+  }
+}

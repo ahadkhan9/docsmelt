@@ -118,7 +118,12 @@ export default function ConverterApp() {
               </p>
             </div>
             <div className="font-mono text-[11px] leading-relaxed text-muted-foreground">
-              <p>Engine: Firecrawl AnyDoc (MIT) · WebAssembly</p>
+              <p>
+                <a href="/benchmark" className="text-muted-foreground underline underline-offset-2 hover:text-foreground">
+                  Benchmarks
+                </a>{" "}
+                · Engine: Firecrawl AnyDoc (MIT) · WebAssembly
+              </p>
               <p>No server · no uploads · no accounts</p>
             </div>
           </div>

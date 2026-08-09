@@ -22,6 +22,7 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://docsmelt.vercel.app"),
   title: "docsmelt — smelt documents into markdown",
   description:
     "Convert PDF, DOCX, XLSX, PPTX, RTF, EPUB, ODS and CSV into clean Markdown, entirely in your browser. Files never leave your device.",
