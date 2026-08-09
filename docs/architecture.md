@@ -69,13 +69,14 @@ Transfer semantics:
 - **Size is a memory decision**: `min(hardwareConcurrency, 4)` workers on
   desktop, 1 on mobile. Each worker owns a grow-only linear memory that
   never shrinks.
-- **Memory guard**: a job starts only if `Σ estimatePeak(in-flight) ≤ budget`,
-  where `estimatePeak = size × 6 + 256 MiB` and budget is 1.5 GiB desktop /
-  700 MiB mobile. The queue scans for the first job that fits, so a small
-  file behind a huge one isn't starved. Per-file cap: 100 MB desktop,
-  40 MB mobile. These caps exist because **OOM is not catchable** — the
-  engine's own limits (128 MiB/entry, 512 MiB total, 2M XML nodes) can
-  legally sum to ~1.5–2 GB and Safari kills the tab with no error surface.
+- **Memory guard**: a job starts only if `fitsBudget(in-flight, next)`, where
+  `estimatePeak = size × 6 + 256 MiB` and budget is 1.5 GiB desktop /
+  700 MiB mobile (both exported and unit-tested). The queue scans for the
+  first job that fits, so a small file behind a huge one isn't starved.
+  Per-file cap: 100 MB desktop, 40 MB mobile. These caps exist because
+  **OOM is not catchable** — the engine's own limits (128 MiB/entry,
+  512 MiB total, 2M XML nodes) can legally sum to ~1.5–2 GB and Safari
+  kills the tab with no error surface.
 - **Cancel = terminate** — a synchronous wasm call has no other abort
   primitive. The in-flight worker is killed and respawned from the cached
   Module (~100–200 ms); queued jobs are simply dropped.
@@ -87,6 +88,10 @@ Transfer semantics:
   `terminate()` is the only reliable way to release wasm linear memory.
 - `pagehide` releases everything (WebKit leaks worker memory across
   reloads).
+- **Startup robustness**: `ensure()` re-pumps the queue after workers spawn
+  (jobs enqueued while the engine was loading must not sit forever), waits
+  for each worker's `ready` with a 15 s timeout (rejecting on `fatal`), and
+  retries the whole spawn once before surfacing an engine error.
 
 ## Errors → UX (`lib/converter/errors.ts`)
 
@@ -116,10 +121,27 @@ format named" (CSV has no signature; the extension names it).
    goes to `toMarkdownBytes` (or `toDocument` when the .zip is asked for).
 3. **Result** — the markdown lands in the ingot pane; the row shows honest
    elapsed time (a synchronous wasm call can't be chunked — progress is
-   indeterminate by design, never fake percentages).
-4. **.zip** — `toDocument` runs lazily only when the user asks, then
-   jszip packs `{name}.md` + `assets/{id}.{ext}` (mediaType → extension map).
-   PDF has no document model, so it's `.md`-only.
+   indeterminate by design, never fake percentages). Empty documents show
+   "No text content was extracted"; outputs over 1 MB render raw-only
+   (react-markdown's parse is synchronous — a multi-MB document would
+   freeze the main thread). A cancel during packing keeps the markdown
+   visible and its download buttons available.
+4. **.zip** — `toDocument` runs lazily only when the user asks (double
+   clicks are guarded), then jszip packs `{name}.md` + `assets/{id}.{ext}`
+   (mediaType → extension map). PDF has no document model, so it's
+   `.md`-only.
+
+## Verified engine behavior (edge-case suite)
+
+The smoke + edge-case suites run the real wasm binary against forged
+samples (`scripts/make-samples.mjs`): zero-byte files land in the error
+taxonomy; empty-but-valid docx yields empty markdown; truncated zips →
+`malformed`; image-only PDFs → `unsupported` with the OCR message; a file
+renamed with a wrong extension still converts via content detection;
+`.png` → `unsupported`; a hand-forged OLE compound file naming
+`EncryptedPackage` → `encrypted` (detection deliberately returns
+`undefined` so the app can report the precise code); a docx with an
+embedded PNG round-trips through `toDocument` assets byte-for-byte.
 
 ## Files
 
