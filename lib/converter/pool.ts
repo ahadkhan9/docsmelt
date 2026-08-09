@@ -39,9 +39,22 @@ const IS_MOBILE =
 const FILE_CAP = (IS_MOBILE ? 40 : 100) * 1024 * 1024; // per file, before reading
 const BUDGET = (IS_MOBILE ? 700 : 1536) * 1024 * 1024; // pool memory budget
 const IDLE_MS = 60_000;
+const INIT_TIMEOUT_MS = 15_000;
 const MAX_WORKERS = IS_MOBILE ? 1 : 4;
 /** input copy in JS + wasm + decompressed parts + DOM tree + assets + slack */
-const estimatePeak = (size: number) => size * 6 + 256 * 1024 * 1024;
+export const estimatePeak = (size: number) => size * 6 + 256 * 1024 * 1024;
+
+/** Memory guard: a job may start only if the in-flight peaks + its own fit. */
+export function fitsBudget(
+  inFlightSizes: number[],
+  nextSize: number,
+  budget: number = BUDGET,
+): boolean {
+  return (
+    inFlightSizes.reduce((sum, s) => sum + estimatePeak(s), 0) + estimatePeak(nextSize) <=
+    budget
+  );
+}
 
 export class ConverterPool {
   private compiled: WebAssembly.Module | null = null;
@@ -85,9 +98,24 @@ export class ConverterPool {
       }
     }
     const n = Math.min(navigator.hardwareConcurrency ?? 2, MAX_WORKERS);
-    const spawns: Promise<void>[] = [];
-    while (this.workers.length < n) spawns.push(this.spawn());
-    await Promise.all(spawns);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const spawns: Promise<void>[] = [];
+      while (this.workers.length < n) spawns.push(this.spawn());
+      try {
+        await Promise.all(spawns);
+        break;
+      } catch {
+        // Init failure (fatal from a worker, or timeout) — full reset, one retry.
+        for (const w of this.workers) w.terminate();
+        this.workers = [];
+        this.busy.clear();
+        this.inflight.clear();
+        if (attempt === 1) throw new Error("converter workers failed to start");
+      }
+    }
+    // Jobs enqueued while the engine was still loading must not sit forever:
+    // pump ran with zero workers earlier and nothing re-triggered it.
+    this.pump();
   }
 
   enqueue(
@@ -148,15 +176,10 @@ export class ConverterPool {
     while (this.queue.length > 0) {
       const worker = this.workers.find((w) => !this.busy.has(w));
       if (!worker) return; // all busy — a result will pump again
-      const inFlightPeak = [...this.inflight.values()].reduce(
-        (sum, j) => sum + estimatePeak(j.bytes.byteLength),
-        0,
-      );
+      const inFlightSizes = [...this.inflight.values()].map((j) => j.bytes.byteLength);
       // Scan for the first job that fits the memory budget (a small file
       // behind a huge one must not starve).
-      const index = this.queue.findIndex(
-        (j) => inFlightPeak + estimatePeak(j.bytes.byteLength) <= BUDGET,
-      );
+      const index = this.queue.findIndex((j) => fitsBudget(inFlightSizes, j.bytes.byteLength));
       if (index < 0) return; // memory guard: wait for a slot
       const [job] = this.queue.splice(index, 1);
       this.busy.add(worker);
@@ -195,13 +218,22 @@ export class ConverterPool {
   }
 
   private waitReady(worker: Worker): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const onMessage = (event: MessageEvent<WorkerResponse>) => {
         if (event.data.type === "ready") {
           worker.removeEventListener("message", onMessage);
+          clearTimeout(timer);
           resolve();
+        } else if (event.data.type === "fatal") {
+          worker.removeEventListener("message", onMessage);
+          clearTimeout(timer);
+          reject(new Error("worker failed to initialize"));
         }
       };
+      const timer = setTimeout(() => {
+        worker.removeEventListener("message", onMessage);
+        reject(new Error("worker init timed out"));
+      }, INIT_TIMEOUT_MS);
       worker.addEventListener("message", onMessage);
     });
   }
