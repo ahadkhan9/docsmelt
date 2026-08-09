@@ -14,6 +14,7 @@ import { ConverterPool } from "./pool";
 import { decodeText, detectPassThrough, type PassThroughKind } from "./passthrough";
 import { buildExportZip, zipDocument } from "./zip";
 import { supportsZip } from "./formats";
+import { downloadBlob } from "@/lib/utils";
 
 let pool: ConverterPool | null = null;
 const getPool = () => (pool ??= new ConverterPool());
@@ -44,14 +45,7 @@ const ACTIVE: ReadonlySet<JobStatus> = new Set([
   "queued", "detecting", "smelting", "packing",
 ]);
 
-function download(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-}
+const download = downloadBlob;
 
 export function useConverter() {
   const [jobs, setJobs] = useState<JobView[]>([]);

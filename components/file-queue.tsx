@@ -10,14 +10,17 @@ import {
   FileQuestion,
   FileText,
   RotateCcw,
+  Scissors,
   Trash2,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { chunkMarkdown, chunkZip, type RagChunk } from "@/lib/converter/chunk";
 import { refine, type ErrorKind } from "@/lib/converter/errors";
 import { FAMILY_OF, FAMILY_TOKEN, FamilyGlyph, supportsZip } from "@/lib/converter/formats";
 import type { JobView } from "@/lib/converter/useConverter";
-import { cn } from "@/lib/utils";
+import { stemOf } from "@/lib/converter/zip";
+import { cn, downloadBlob } from "@/lib/utils";
 
 const formatSize = (bytes: number): string => {
   if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)} MB`;
@@ -145,7 +148,26 @@ function QueueRow({
   onDownloadZip: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [chunkOpen, setChunkOpen] = useState(false);
+  const [chunkSize, setChunkSize] = useState<500 | 1000>(1000);
+  const [chunks, setChunks] = useState<RagChunk[] | null>(null);
   const family = job.format ? FAMILY_OF[job.format] : undefined;
+
+  const openChunks = () => {
+    if (!job.markdown) return;
+    setChunks(chunkMarkdown(job.markdown, { targetTokens: chunkSize }));
+    setChunkOpen(true);
+  };
+  const changeChunkSize = (size: 500 | 1000) => {
+    setChunkSize(size);
+    if (job.markdown) setChunks(chunkMarkdown(job.markdown, { targetTokens: size }));
+  };
+  const downloadChunks = async () => {
+    if (!chunks?.length) return;
+    const base = stemOf(job.file.name);
+    const blob = await chunkZip(base, chunks, job.file.name);
+    downloadBlob(blob, `${base}-chunks.zip`);
+  };
   const active = ACTIVE.has(job.status);
   const elapsed = Math.max(0, Math.round((now - job.startedAt) / 1000));
   const error =
@@ -246,6 +268,17 @@ function QueueRow({
                   <Archive className="size-4" />
                 </Button>
               )}
+              <Button
+                variant="ghost"
+                size="icon-lg"
+                className="min-h-11 min-w-11"
+                aria-label="Chunk for RAG"
+                title="Chunk for RAG"
+                aria-expanded={chunkOpen}
+                onClick={chunkOpen ? () => setChunkOpen(false) : openChunks}
+              >
+                <Scissors className="size-4" />
+              </Button>
               <Button variant="ghost" size="icon-lg" className="min-h-11 min-w-11" aria-label="Remove from queue" title="Remove" onClick={onRemove}>
                 <Trash2 className="size-4" />
               </Button>
@@ -272,6 +305,62 @@ function QueueRow({
           <p className="text-xs font-medium text-destructive">{error.title}</p>
           <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{error.hint}</p>
         </div>
+      )}
+      {chunkOpen && chunks && (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          onClick={(e) => e.stopPropagation()}
+          className="mt-3 rounded-lg border border-border bg-background p-3"
+        >
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+              Chunk for RAG
+            </p>
+            <div
+              className="flex rounded-lg border border-border bg-background p-0.5"
+              role="group"
+              aria-label="Chunk size in tokens"
+            >
+              {([500, 1000] as const).map((size) => (
+                <button
+                  key={size}
+                  onClick={() => changeChunkSize(size)}
+                  aria-pressed={chunkSize === size}
+                  className={cn(
+                    "min-h-10 rounded-md px-3 font-mono text-[11px] uppercase tracking-wide transition-colors duration-150",
+                    chunkSize === size
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {size} tok
+                </button>
+              ))}
+            </div>
+            <span className="font-mono text-[11px] text-steel">
+              {chunks.length} chunk{chunks.length === 1 ? "" : "s"} · ~
+              {Math.round(chunks.reduce((s, c) => s + c.tokens, 0) / Math.max(1, chunks.length))}{" "}
+              tokens avg
+            </span>
+            <div className="ml-auto flex items-center gap-1">
+              <Button size="sm" className="min-h-10" onClick={() => void downloadChunks()}>
+                <Archive className="size-3.5" aria-hidden />
+                Download .zip
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="min-h-10"
+                onClick={() => setChunkOpen(false)}
+              >
+                <X className="size-3.5" aria-hidden />
+                Close
+              </Button>
+            </div>
+          </div>
+        </motion.div>
       )}
       {active && (
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-muted/60">
