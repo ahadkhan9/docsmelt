@@ -42,6 +42,15 @@ export default function ConverterApp() {
     if (c.notice) setAnnouncement(c.notice);
   }, [c.notice]);
 
+  // PWA: register the offline shell (production only; dev never caches).
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") return;
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // offline is a bonus, never a failure mode
+    });
+  }, []);
+
   return (
     <MotionConfig reducedMotion="user">
       <div className="flex min-h-dvh flex-col">
