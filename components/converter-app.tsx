@@ -213,18 +213,18 @@ export default function ConverterApp() {
         </main>
 
         <footer className="border-t border-border/60">
-          <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 sm:px-6 md:flex-row md:items-end md:justify-between">
-            <div>
+          <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-8 sm:px-6 md:flex-row md:items-end md:justify-between">
+            <div className="min-w-0">
               <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
                 Formats
               </p>
-              <p className="mt-2 max-w-2xl font-mono text-[11px] leading-relaxed text-muted-foreground">
+              <p className="mt-2 max-w-2xl font-mono text-[11px] leading-relaxed text-muted-foreground text-pretty">
                 {FORMATS}
               </p>
               <p className="mt-1.5 font-mono text-[11px] text-muted-foreground">
                 Markdown and plain text pass through unchanged — no conversion needed.
               </p>
-              <div className="shortcuts-hint mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-muted-foreground">
+              <div className="shortcuts-hint mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 font-mono text-[11px] text-muted-foreground">
                 <span>
                   <kbd className="kbd">⌘O</kbd> open
                 </span>
@@ -242,37 +242,20 @@ export default function ConverterApp() {
                 </span>
               </div>
             </div>
-            <div className="font-mono text-[11px] leading-relaxed text-muted-foreground">
-              <p>
-                <a href="/benchmark" className="text-muted-foreground underline underline-offset-2 hover:text-foreground">
-                  Benchmarks
-                </a>{" "}
-                · Engine: Firecrawl AnyDoc (MIT) · WebAssembly
-              </p>
-              <p>
-                No server · no uploads · no accounts
-                {c.historyCount !== null && (
-                  <>
-                    {" · "}
-                    <button
-                      type="button"
-                      className="underline underline-offset-2 hover:text-foreground"
-                      onClick={() => void c.clearHistoryStore()}
-                    >
-                      Clear history
-                    </button>
-                  </>
-                )}
-              </p>
-              <p>
-                Built by <span translate="no">Ahad Khan</span> ·{" "}
-                <a
-                  href="https://ahad.works"
-                  className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                >
-                  ahad.works
-                </a>
-              </p>
+            <div className="font-mono text-[11px] leading-relaxed text-muted-foreground md:shrink-0 md:text-right">
+              <p>Engine: Firecrawl AnyDoc (MIT) · WebAssembly</p>
+              <p>No server · no uploads · no accounts</p>
+              {c.historyCount !== null && (
+                <p className="mt-1">
+                  <button
+                    type="button"
+                    className="underline underline-offset-2 hover:text-foreground"
+                    onClick={() => void c.clearHistoryStore()}
+                  >
+                    Clear history
+                  </button>
+                </p>
+              )}
             </div>
           </div>
         </footer>
