@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Copy, Download } from "lucide-react";
+import { ArrowUp, Check, Copy, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarkdownView } from "./markdown";
 import { chunkSummary, type RagChunk } from "@/lib/converter/chunk";
@@ -105,6 +105,11 @@ export function DocumentPreview({
       ?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
   }, []);
 
+  const scrollToTop = useCallback(() => {
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    paneRef.current?.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+  }, []);
+
   const onRailKeyDown = (event: React.KeyboardEvent) => {
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     event.preventDefault();
@@ -123,43 +128,6 @@ export function DocumentPreview({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* mobile navigation — chips, touch-scrollable, no hover-only */}
-      <div className="flex gap-1.5 overflow-x-auto border-b border-paper-line bg-[#f1f3f4] p-2 scroll-thin md:hidden">
-        {chunkMode && chunks ? (
-          chunks.map((chunk) => (
-            <button
-              key={chunk.index}
-              onClick={() => jumpTo(`[data-chunk="${chunk.index}"]`)}
-              aria-current={activeChunk === chunk.index ? "true" : undefined}
-              className={cn(
-                "min-h-10 shrink-0 whitespace-nowrap rounded-full border px-3 font-mono text-[11px] transition-colors duration-150",
-                activeChunk === chunk.index
-                  ? "border-molten bg-molten/10 text-paper-foreground"
-                  : "border-paper-line text-paper-muted hover:text-paper-foreground",
-              )}
-            >
-              {chunk.index}
-            </button>
-          ))
-        ) : (
-          outlineItems.map((section) => (
-            <button
-              key={section.id}
-              onClick={() => jumpTo(`[data-section="${section.id}"]`)}
-              aria-current={activeOutlineId === section.id ? "true" : undefined}
-              className={cn(
-                "min-h-10 shrink-0 whitespace-nowrap rounded-full border px-3 font-mono text-[11px] transition-colors duration-150",
-                activeOutlineId === section.id
-                  ? "border-molten bg-molten/10 text-paper-foreground"
-                  : "border-paper-line text-paper-muted hover:text-paper-foreground",
-              )}
-            >
-              {section.level > 0 ? section.text : "preamble"}
-            </button>
-          ))
-        )}
-      </div>
-
       <div className="relative flex min-h-0 flex-1">
         {/* left rail — outline (Flow A) or chunks (Flow B) */}
         <aside className="hidden w-52 shrink-0 overflow-y-auto border-r border-paper-line bg-[#f1f3f4] p-3 scroll-thin md:block">
@@ -217,9 +185,56 @@ export function DocumentPreview({
         {/* content scroller */}
         <div
           ref={paneRef}
-          className="scroll-pane relative flex-1 overflow-y-auto overscroll-contain scroll-thin bg-paper text-paper-foreground"
+          className="scroll-pane relative flex-1 overflow-y-auto overscroll-contain scroll-thin bg-paper text-paper-foreground [scroll-padding-top:52px] md:[scroll-padding-top:0px]"
         >
+            {chunkMode && chunks ? (
+              chunks.map((chunk) => (
+                <button
+                  key={chunk.index}
+                  onClick={() => jumpTo(`[data-chunk="${chunk.index}"]`)}
+                  aria-current={activeChunk === chunk.index ? "true" : undefined}
+                  className={cn(
+                    "min-h-10 shrink-0 whitespace-nowrap rounded-full border px-3 font-mono text-[11px] transition-colors duration-150",
+                    activeChunk === chunk.index
+                      ? "border-molten bg-molten/10 text-paper-foreground"
+                      : "border-paper-line text-paper-muted hover:text-paper-foreground",
+                  )}
+                >
+                  {chunk.index}
+                </button>
+              ))
+            ) : (
+              outlineItems.map((section) => (
+                <button
+                  key={section.id}
+                  onClick={() => jumpTo(`[data-section="${section.id}"]`)}
+                  aria-current={activeOutlineId === section.id ? "true" : undefined}
+                  className={cn(
+                    "min-h-10 shrink-0 whitespace-nowrap rounded-full border px-3 font-mono text-[11px] transition-colors duration-150",
+                    activeOutlineId === section.id
+                      ? "border-molten bg-molten/10 text-paper-foreground"
+                      : "border-paper-line text-paper-muted hover:text-paper-foreground",
+                  )}
+                >
+                  {section.level > 0 ? section.text : "preamble"}
+                </button>
+              ))
+            )}
+          </div>
           <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
+          {/* mobile navigation — sticky INSIDE the scroller so it never
+              scrolls away (the one-way-trap fix, docs/mobile-nav-rethink.md);
+              the leading Top control guarantees a way back. */}
+          <div className="sticky top-0 z-10 flex gap-1.5 overflow-x-auto border-b border-paper-line bg-[#f1f3f4] p-2 scroll-thin md:hidden">
+            <button
+              onClick={scrollToTop}
+              aria-label="Back to top of the document"
+              className="flex min-h-10 shrink-0 items-center gap-1 rounded-full border border-paper-line px-3 font-mono text-[11px] text-paper-muted transition-colors duration-150 hover:text-paper-foreground"
+            >
+              <ArrowUp className="size-3.5" aria-hidden />
+              Top
+            </button>
+
             {chunkMode && chunks ? (
               <>
                 {summary && (
