@@ -6,7 +6,7 @@ import { ArrowUp, List, X } from "lucide-react";
 import { ChunkBlock, SectionBlock } from "./preview-blocks";
 import { MarkdownView } from "./markdown";
 import { chunkSummary, type RagChunk } from "@/lib/converter/chunk";
-import { buildContents } from "@/lib/converter/contents";
+import { buildContents, rovingIndex } from "@/lib/converter/contents";
 import { parseSections, sectionForHeading } from "@/lib/converter/sections";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +38,7 @@ export function MobilePreview({
   const contents = useMemo(() => buildContents(outline, chunks), [outline, chunks]);
   const paneRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeChunk, setActiveChunk] = useState<number | null>(null);
   const [progress, setProgress] = useState(0);
@@ -132,6 +133,15 @@ export function MobilePreview({
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  const onListKeyDown = (event: React.KeyboardEvent<HTMLUListElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    const buttons = Array.from(listRef.current?.querySelectorAll("button") ?? []);
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const next = rovingIndex(index < 0 ? 0 : index, buttons.length, event.key === "ArrowDown" ? 1 : -1);
+    buttons[next]?.focus();
+  };
+
   const activeOutlineId =
     chunkMode && activeChunk && chunks
       ? (sectionForHeading(outline, chunks[activeChunk - 1]?.meta.headingPath ?? [])?.id ??
@@ -143,7 +153,7 @@ export function MobilePreview({
       {/* content scroller — plain, no sticky, no nested scroll containers */}
       <div
         ref={paneRef}
-        className="scroll-pane relative flex-1 overflow-y-auto overscroll-contain scroll-thin bg-paper text-paper-foreground"
+        className="scroll-pane relative flex-1 touch-manipulation overflow-y-auto overscroll-contain scroll-thin bg-paper text-paper-foreground"
       >
         <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
           {chunkMode && chunks ? (
@@ -241,7 +251,7 @@ export function MobilePreview({
                   <X className="size-4" />
                 </button>
               </div>
-              <ul className="max-h-[calc(75dvh-3.5rem)] overflow-y-auto overscroll-contain p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] scroll-thin">
+              <ul ref={listRef} onKeyDown={onListKeyDown} className="max-h-[calc(75dvh-3.5rem)] touch-manipulation overflow-y-auto overscroll-contain p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] scroll-thin">
                 {contents.map((item, i) => {
                   if (item.kind === "top") {
                     return (
@@ -256,11 +266,11 @@ export function MobilePreview({
                       </li>
                     );
                   }
-                  if (item.kind === "chunks-head") {
+                  if (item.kind === "chunks-head" || item.kind === "sections-head") {
                     return (
-                      <li key="chunks-head">
+                      <li key={item.kind}>
                         <p className="px-3 pb-1 pt-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                          Chunks
+                          {item.kind === "chunks-head" ? "Chunks" : "Sections"}
                         </p>
                       </li>
                     );

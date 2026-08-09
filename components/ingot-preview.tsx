@@ -85,7 +85,7 @@ export function IngotPreview({
       : null;
 
   return (
-    <div className="flex min-h-[480px] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[600px]">
+    <div className="flex h-[60dvh] min-h-[480px] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:h-[600px]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/60 px-4 py-3">
         <span
           className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background"
