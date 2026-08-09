@@ -37,6 +37,11 @@ export default function ConverterApp() {
     } else setAnnouncement(`Cancelled ${last.file.name}.`);
   }, [c.jobs]);
 
+  // Folder-drop / batch feedback through the same live region.
+  useEffect(() => {
+    if (c.notice) setAnnouncement(c.notice);
+  }, [c.notice]);
+
   return (
     <MotionConfig reducedMotion="user">
       <div className="flex min-h-dvh flex-col">
@@ -69,7 +74,9 @@ export default function ConverterApp() {
                   jobs={c.jobs}
                   now={c.now}
                   selectedId={c.selected?.id ?? null}
+                  checked={c.checked}
                   onSelect={c.select}
+                  onToggleCheck={c.toggleCheck}
                   onCancel={c.cancel}
                   onRemove={c.remove}
                   onRetry={c.retry}
@@ -77,6 +84,10 @@ export default function ConverterApp() {
                   onDownloadZip={c.downloadZip}
                   onClearFinished={c.clearFinished}
                   onExportAll={() => void c.exportAll()}
+                  onDeleteChecked={c.deleteChecked}
+                  onExportChecked={() => void c.exportChecked()}
+                  onCopyChecked={c.copyChecked}
+                  onClearChecked={c.clearChecked}
                   exporting={c.exporting}
                 />
                 <IngotPreview

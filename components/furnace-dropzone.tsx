@@ -10,7 +10,13 @@ import {
   FamilyGlyph,
   type FormatFamily,
 } from "@/lib/converter/formats";
+import { getDroppedFiles } from "@/lib/converter/folders";
 import { cn } from "@/lib/utils";
+
+export interface DropMeta {
+  folders: number;
+  foldersUnsupported: boolean;
+}
 
 const FAMILIES: FormatFamily[] = ["word", "pdf", "sheet", "slide", "book"];
 
@@ -26,7 +32,7 @@ export function FurnaceDropzone({
 }: {
   compact?: boolean;
   engine: "cold" | "loading" | "ready" | "error";
-  onFiles: (files: File[]) => void;
+  onFiles: (files: File[], meta?: DropMeta) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -56,7 +62,14 @@ export function FurnaceDropzone({
     e.preventDefault();
     dragDepth.current = 0;
     setDragActive(false);
-    handleFiles(e.dataTransfer.files);
+    // Folders arrive via the entry API; walk them recursively, then pass
+    // files + honest meta (folder count / unsupported) up to the hook.
+    void getDroppedFiles(e.dataTransfer).then((result) =>
+      onFiles(result.files, {
+        folders: result.folders,
+        foldersUnsupported: result.foldersUnsupported,
+      }),
+    );
   };
   const onPaste = (e: React.ClipboardEvent) => {
     if (e.clipboardData.files.length > 0) handleFiles(e.clipboardData.files);

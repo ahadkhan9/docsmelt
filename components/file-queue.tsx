@@ -34,7 +34,9 @@ export function FileQueue({
   jobs,
   now,
   selectedId,
+  checked,
   onSelect,
+  onToggleCheck,
   onCancel,
   onRemove,
   onRetry,
@@ -42,12 +44,18 @@ export function FileQueue({
   onDownloadZip,
   onClearFinished,
   onExportAll,
+  onDeleteChecked,
+  onExportChecked,
+  onCopyChecked,
+  onClearChecked,
   exporting,
 }: {
   jobs: JobView[];
   now: number;
   selectedId: string | null;
+  checked: string[];
   onSelect: (id: string) => void;
+  onToggleCheck: (id: string, range: boolean) => void;
   onCancel: (id: string) => void;
   onRemove: (id: string) => void;
   onRetry: (id: string) => void;
@@ -55,44 +63,103 @@ export function FileQueue({
   onDownloadZip: (id: string) => void;
   onClearFinished: () => void;
   onExportAll: () => void;
+  onDeleteChecked: () => void;
+  onExportChecked: () => void;
+  onCopyChecked: () => Promise<number>;
+  onClearChecked: () => void;
   exporting: boolean;
 }) {
+  const [copiedN, setCopiedN] = useState<number | null>(null);
+  const checkedSet = new Set(checked);
   const doneCount = jobs.filter((j) => j.status === "done").length;
   const finished = jobs.some((j) => ["done", "failed", "cancelled"].includes(j.status));
+  const anyCheckedDone = checked.some(
+    (id) => jobs.find((j) => j.id === id)?.status === "done",
+  );
+
+  const copyChecked = async () => {
+    const n = await onCopyChecked();
+    if (n > 0) {
+      setCopiedN(n);
+      setTimeout(() => setCopiedN(null), 1500);
+    }
+  };
 
   return (
     <div className="flex max-h-[600px] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:max-h-none">
-      <div className="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
         <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
           Queue{" "}
           <span className="text-foreground">
             {doneCount}/{jobs.length}
           </span>
         </h2>
-        <div className="flex items-center gap-1">
-          {doneCount > 0 && (
+        {checked.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="mr-1 font-mono text-[11px] text-steel">
+              {checked.length} selected
+            </span>
+            <Button variant="secondary" size="sm" className="min-h-10" onClick={onDeleteChecked}>
+              <Trash2 className="size-3.5" aria-hidden />
+              Delete
+            </Button>
             <Button
               variant="secondary"
               size="sm"
               className="min-h-10"
-              onClick={onExportAll}
-              disabled={exporting}
-              title={
-                exporting
-                  ? "Packing files…"
-                  : `Export ${doneCount} converted file${doneCount === 1 ? "" : "s"} as one .zip`
-              }
+              disabled={!anyCheckedDone || exporting}
+              onClick={onExportChecked}
             >
               <Archive className="size-3.5" aria-hidden />
-              {exporting ? "Exporting…" : "Export all"}
+              Export .zip
             </Button>
-          )}
-          {finished && (
-            <Button variant="ghost" size="sm" className="min-h-10" onClick={onClearFinished}>
-              Clear finished
+            <Button
+              variant="secondary"
+              size="sm"
+              className="min-h-10"
+              disabled={!anyCheckedDone}
+              onClick={() => void copyChecked()}
+            >
+              <Copy className="size-3.5" aria-hidden />
+              {copiedN !== null ? `Copied ${copiedN}` : "Copy"}
             </Button>
-          )}
-        </div>
+            <Button
+              variant="ghost"
+              size="icon-lg"
+              className="min-h-11 min-w-11"
+              aria-label="Clear selection"
+              title="Clear selection"
+              onClick={onClearChecked}
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1">
+            {doneCount > 0 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="min-h-10"
+                onClick={onExportAll}
+                disabled={exporting}
+                title={
+                  exporting
+                    ? "Packing files…"
+                    : `Export ${doneCount} converted file${doneCount === 1 ? "" : "s"} as one .zip`
+                }
+              >
+                <Archive className="size-3.5" aria-hidden />
+                {exporting ? "Exporting…" : "Export all"}
+              </Button>
+            )}
+            {finished && (
+              <Button variant="ghost" size="sm" className="min-h-10" onClick={onClearFinished}>
+                Clear finished
+              </Button>
+            )}
+          </div>
+        )}
       </div>
       {jobs.length === 0 ? (
         <p className="px-4 py-10 text-center font-mono text-xs leading-relaxed text-muted-foreground">
@@ -111,6 +178,8 @@ export function FileQueue({
                 job={job}
                 now={now}
                 selected={job.id === selectedId}
+                checked={checkedSet.has(job.id)}
+                onToggleCheck={(range) => onToggleCheck(job.id, range)}
                 onSelect={() => onSelect(job.id)}
                 onCancel={() => onCancel(job.id)}
                 onRemove={() => onRemove(job.id)}
@@ -130,6 +199,8 @@ function QueueRow({
   job,
   now,
   selected,
+  checked,
+  onToggleCheck,
   onSelect,
   onCancel,
   onRemove,
@@ -140,6 +211,8 @@ function QueueRow({
   job: JobView;
   now: number;
   selected: boolean;
+  checked: boolean;
+  onToggleCheck: (range: boolean) => void;
   onSelect: () => void;
   onCancel: () => void;
   onRemove: () => void;
@@ -203,6 +276,23 @@ function QueueRow({
       )}
     >
       <div className="flex items-center gap-3">
+        <button
+          role="checkbox"
+          aria-checked={checked}
+          aria-label={`Select ${job.file.name} for batch actions`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleCheck(e.shiftKey);
+          }}
+          className={cn(
+            "flex size-10 shrink-0 items-center justify-center rounded-lg border transition-colors duration-150 focus-visible:border-ring focus-visible:bg-accent/40",
+            checked
+              ? "border-molten bg-molten/10 text-molten"
+              : "border-border text-transparent hover:border-molten/50 hover:text-muted-foreground",
+          )}
+        >
+          <Check className="size-4" />
+        </button>
         <span
           className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background"
           style={{ color: family ? `var(--${FAMILY_TOKEN[family]})` : "var(--muted-foreground)" }}

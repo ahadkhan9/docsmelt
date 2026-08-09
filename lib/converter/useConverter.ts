@@ -14,6 +14,7 @@ import { ConverterPool } from "./pool";
 import { decodeText, detectPassThrough, type PassThroughKind } from "./passthrough";
 import { buildExportZip, zipDocument } from "./zip";
 import { supportsZip } from "./formats";
+import { rangeSelect, toggleChecked } from "./selection";
 import { downloadBlob } from "@/lib/utils";
 
 let pool: ConverterPool | null = null;
@@ -53,6 +54,9 @@ export function useConverter() {
   const [engine, setEngine] = useState<EngineState>("cold");
   const [now, setNow] = useState(() => Date.now());
   const [exporting, setExporting] = useState(false);
+  const [checked, setChecked] = useState<string[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const checkAnchor = useRef<string | null>(null);
 
   const keysRef = useRef(new Map<string, JobKey>());
   const jobsRef = useRef<JobView[]>([]);
@@ -154,16 +158,67 @@ export function useConverter() {
     }
   }, [ensureEngine, setJob]);
 
-  const addFiles = useCallback((files: File[]) => {
-    if (files.length === 0) return;
-    for (const file of files) {
-      const id = crypto.randomUUID();
-      keysRef.current.set(id, { cancelled: false });
-      setJobs((list) => [...list, { id, file, status: "queued", startedAt: Date.now() }]);
-      const view: JobView = { id, file, status: "queued", startedAt: Date.now() };
-      void run(view);
+  const addFiles = useCallback(
+    (files: File[], meta?: { folders?: number; foldersUnsupported?: boolean }) => {
+      if (files.length === 0) {
+        if (meta?.foldersUnsupported) {
+          setNotice("Folder drop isn't supported in this browser — pick files instead.");
+        }
+        return;
+      }
+      if (meta?.folders && meta.folders > 0) {
+        setNotice(
+          `Added ${files.length} file${files.length === 1 ? "" : "s"} from ${meta.folders} folder${meta.folders === 1 ? "" : "s"}.`,
+        );
+      }
+      for (const file of files) {
+        const id = crypto.randomUUID();
+        keysRef.current.set(id, { cancelled: false });
+        setJobs((list) => [...list, { id, file, status: "queued", startedAt: Date.now() }]);
+        const view: JobView = { id, file, status: "queued", startedAt: Date.now() };
+        void run(view);
+      }
+    },
+    [run],
+  );
+
+  // ── multi-select ───────────────────────────────────────────────────────
+  const toggleCheck = useCallback((id: string, range = false) => {
+    setChecked((prev) => {
+      const ids = jobsRef.current.map((j) => j.id);
+      const anchor = checkAnchor.current;
+      checkAnchor.current = id;
+      if (range && anchor) return [...rangeSelect(ids, anchor, id)];
+      return [...toggleChecked(new Set(prev), id)];
+    });
+  }, []);
+
+  const clearChecked = useCallback(() => setChecked([]), []);
+
+  const deleteChecked = useCallback(() => {
+    const doomed = new Set(checked);
+    for (const id of doomed) {
+      keysRef.current.delete(id);
+      setJobs((list) => list.filter((j) => j.id !== id));
+      setSelectedId((s) => (s && doomed.has(s) ? null : s));
     }
-  }, [run]);
+    setChecked([]);
+  }, [checked]);
+
+  const copyChecked = useCallback(async (): Promise<number> => {
+    const ids = new Set(checked);
+    const done = jobsRef.current.filter(
+      (j) => j.status === "done" && j.markdown && ids.has(j.id),
+    );
+    if (done.length === 0) return 0;
+    const text = done.map((j) => `# ${j.file.name}\n\n${j.markdown}`).join("\n\n---\n\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      return done.length;
+    } catch {
+      return -1;
+    }
+  }, [checked]);
 
   const cancel = useCallback((id: string) => {
     const key = keysRef.current.get(id);
@@ -243,19 +298,19 @@ export function useConverter() {
   }, [setJob]);
 
   /**
-   * Export all done jobs as one .zip. Assets come from a lazy toDocument
-   * pass, run sequentially (memory-safe). Jobs flip to 'packing' while
-   * their assets are gathered; markdown stays visible in the preview.
+   * Export a list of done jobs as one .zip. Assets come from a lazy
+   * toDocument pass, run sequentially (memory-safe). Jobs flip to
+   * 'packing' while their assets are gathered; markdown stays visible.
    */
-  const exportAll = useCallback(async (): Promise<boolean> => {
-    const done = jobsRef.current.filter((j) => j.status === "done");
-    if (done.length === 0 || exporting) return false;
-    if (jobsRef.current.some((j) => j.status === "packing")) return false;
-    setExporting(true);
-    for (const job of done) setJob(job.id, { status: "packing" });
-    try {
-      const entries: { name: string; markdown: string; assets?: Asset[] }[] = [];
-      for (const job of done) {
+  const exportJobs = useCallback(
+    async (list: JobView[]): Promise<boolean> => {
+      if (list.length === 0 || exporting) return false;
+      if (jobsRef.current.some((j) => j.status === "packing")) return false;
+      setExporting(true);
+      for (const job of list) setJob(job.id, { status: "packing" });
+      try {
+        const entries: { name: string; markdown: string; assets?: Asset[] }[] = [];
+        for (const job of list) {
         const entry: { name: string; markdown: string; assets?: Asset[] } = {
           name: job.file.name,
           markdown: job.markdown ?? "",
@@ -279,16 +334,28 @@ export function useConverter() {
             // Asset pass failed — export the markdown alone, honestly.
           }
         }
-        entries.push(entry);
+          entries.push(entry);
+        }
+        const blob = await buildExportZip(entries);
+        download(blob, `docsmelt-export-${entries.length}-files.zip`);
+        return true;
+      } finally {
+        for (const job of list) setJob(job.id, { status: "done" });
+        setExporting(false);
       }
-      const blob = await buildExportZip(entries);
-      download(blob, `docsmelt-export-${entries.length}-files.zip`);
-      return true;
-    } finally {
-      for (const job of done) setJob(job.id, { status: "done" });
-      setExporting(false);
-    }
-  }, [exporting, setJob]);
+    },
+    [exporting, setJob],
+  );
+
+  const exportAll = useCallback(
+    () => exportJobs(jobsRef.current.filter((j) => j.status === "done")),
+    [exportJobs],
+  );
+
+  const exportChecked = useCallback(() => {
+    const ids = new Set(checked);
+    return exportJobs(jobsRef.current.filter((j) => j.status === "done" && ids.has(j.id)));
+  }, [checked, exportJobs]);
 
   // One shared clock while anything is active — rows derive elapsed time.
   useEffect(() => {
@@ -309,7 +376,10 @@ export function useConverter() {
 
   return {
     jobs, selected, engine, now, exporting,
-    addFiles, cancel, remove, retry, clearFinished, exportAll,
+    checked, notice,
+    addFiles, cancel, remove, retry, clearFinished,
+    exportAll, exportChecked, deleteChecked, copyChecked,
+    toggleCheck, clearChecked,
     downloadMarkdown, downloadZip, select: setSelectedId,
     activeCount,
   };
