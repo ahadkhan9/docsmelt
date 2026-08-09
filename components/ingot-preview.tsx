@@ -2,13 +2,24 @@
 
 import { useState } from "react";
 import { motion } from "motion/react";
-import { Archive, Check, CircleAlert, Copy, Download, FileText, RotateCcw, Trash2 } from "lucide-react";
+import {
+  Archive,
+  Check,
+  CircleAlert,
+  Copy,
+  Download,
+  FileText,
+  RotateCcw,
+  Settings2,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ChunkSettingsStrip } from "./chunk-settings";
 import { MarkdownView } from "./markdown";
-import { NavigatedPreview } from "./navigated-preview";
+import { DocumentPreview } from "./document-preview";
 import { refine, type ErrorKind } from "@/lib/converter/errors";
 import { FAMILY_OF, FAMILY_TOKEN, FamilyGlyph, supportsZip } from "@/lib/converter/formats";
-import type { JobView } from "@/lib/converter/useConverter";
+import type { ChunkSettings, JobView } from "@/lib/converter/useConverter";
 import { cn } from "@/lib/utils";
 
 /**
@@ -17,12 +28,16 @@ import { cn } from "@/lib/utils";
  */
 export function IngotPreview({
   job,
+  chunkSettings,
+  onChunkSettings,
   onDownloadMd,
   onDownloadZip,
   onRetry,
   onRemove,
 }: {
   job: JobView | null;
+  chunkSettings: ChunkSettings;
+  onChunkSettings: (next: ChunkSettings) => void;
   onDownloadMd: (id: string) => void;
   onDownloadZip: (id: string) => void;
   onRetry: (id: string) => void;
@@ -30,6 +45,7 @@ export function IngotPreview({
 }) {
   const [tab, setTab] = useState<"rendered" | "raw">("rendered");
   const [copied, setCopied] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const copy = async () => {
     if (!job?.markdown) return;
@@ -123,6 +139,34 @@ export function IngotPreview({
                 ))}
               </div>
             )}
+            {!huge && (
+              <button
+                role="switch"
+                aria-checked={chunkSettings.enabled}
+                onClick={() => onChunkSettings({ ...chunkSettings, enabled: !chunkSettings.enabled })}
+                className={cn(
+                  "min-h-10 rounded-lg border px-3 font-mono text-[11px] uppercase tracking-wide transition-colors duration-150",
+                  chunkSettings.enabled
+                    ? "border-molten bg-molten/10 text-molten"
+                    : "border-border text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Chunking {chunkSettings.enabled ? "on" : "off"}
+              </button>
+            )}
+            {chunkSettings.enabled && (
+              <Button
+                variant="ghost"
+                size="icon-lg"
+                className="min-h-11 min-w-11"
+                aria-label="Edit chunk settings"
+                title="Edit chunk settings"
+                aria-expanded={settingsOpen}
+                onClick={() => setSettingsOpen((open) => !open)}
+              >
+                <Settings2 className="size-4" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon-lg"
@@ -159,6 +203,10 @@ export function IngotPreview({
         )}
       </div>
 
+      {chunkSettings.enabled && settingsOpen && (
+        <ChunkSettingsStrip settings={chunkSettings} onChange={onChunkSettings} />
+      )}
+
       {job.markdown ? (
         <motion.div
           key={job.id}
@@ -185,7 +233,14 @@ export function IngotPreview({
               </p>
             </div>
           ) : tab === "rendered" ? (
-            <NavigatedPreview markdown={job.markdown} />
+            <DocumentPreview
+              markdown={job.markdown}
+              chunks={job.chunks ?? null}
+              stem={job.file.name.replace(/\.[^.]+$/, "") || "document"}
+              tokenLabel={
+                job.chunkEncoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k tokens"
+              }
+            />
           ) : (
             <div className="h-full overflow-y-auto scroll-thin bg-paper text-paper-foreground">
               <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">

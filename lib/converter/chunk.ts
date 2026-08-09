@@ -515,3 +515,22 @@ function runInChunkWorker(markdown: string, options: ChunkOptions): Promise<Chun
     worker.postMessage({ type: "chunk", jobId, markdown, options });
   });
 }
+
+/** View-level summary for the chunked preview header. */
+export interface ChunkSummary {
+  count: number;
+  avgTokens: number;
+  tablesKept: number;
+  oversized: number;
+}
+
+export function chunkSummary(chunks: RagChunk[]): ChunkSummary {
+  if (chunks.length === 0) return { count: 0, avgTokens: 0, tablesKept: 0, oversized: 0 };
+  const total = chunks.reduce((sum, c) => sum + c.tokens, 0);
+  return {
+    count: chunks.length,
+    avgTokens: Math.round(total / chunks.length),
+    tablesKept: chunks.filter((c) => c.meta.isTable).length,
+    oversized: chunks.filter((c) => c.meta.oversizedTable).length,
+  };
+}

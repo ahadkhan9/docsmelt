@@ -15,6 +15,7 @@ import { decodeText, detectPassThrough, type PassThroughKind } from "./passthrou
 import { buildExportZip, zipDocument } from "./zip";
 import { supportsZip } from "./formats";
 import { rangeSelect, toggleChecked } from "./selection";
+import { chunkMarkdownAsync, resolveChunkOptions, type RagChunk } from "./chunk";
 import { clearHistory, loadAll, recordFromJob, recordToJobView, saveRecord } from "./history";
 import { downloadBlob } from "@/lib/utils";
 
@@ -41,6 +42,18 @@ export interface JobView {
   startedAt: number;
   /** Restored from IndexedDB — the original file bytes are gone. */
   restored?: boolean;
+  /** Computed chunks when chunking is enabled (Flow B preview). */
+  chunks?: RagChunk[];
+  chunkEncoding?: string;
+}
+
+/** Global chunking settings — the Flow A/B switch (docs/preview-design.md §6). */
+export interface ChunkSettings {
+  enabled: boolean;
+  preset: 256 | 512 | 1024;
+  customTokens?: string;
+  overlapAuto: boolean;
+  overlapTokens?: string;
 }
 
 type JobKey = { poolJob?: number; cancelled: boolean };
@@ -60,7 +73,15 @@ export function useConverter() {
   const [checked, setChecked] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [historyCount, setHistoryCount] = useState<number | null>(null);
+  const [chunkSettings, setChunkSettingsState] = useState<ChunkSettings>({
+    enabled: false,
+    preset: 512,
+    overlapAuto: true,
+  });
   const checkAnchor = useRef<string | null>(null);
+  const chunkSettingsRef = useRef<ChunkSettings>(chunkSettings);
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
 
   // Offer a restore banner once, if anything survived the last session.
   useEffect(() => {
@@ -116,6 +137,38 @@ export function useConverter() {
       });
   }, []);
 
+  /** Compute chunks for a finished job when chunking is enabled (Flow B).
+   *  Chunking is auxiliary — failures never fail the conversion. */
+  const attachChunks = useCallback(async (view: JobView) => {
+    if (!view.markdown) return;
+    const settings = chunkSettingsRef.current;
+    if (!settings?.enabled) return;
+    const options = resolveChunkOptions({
+      preset: settings.preset,
+      customTokens: Number(settings.customTokens) || undefined,
+      overlapAuto: settings.overlapAuto,
+      overlapTokens: Number(settings.overlapTokens) || undefined,
+    });
+    try {
+      const result = await chunkMarkdownAsync(view.markdown, options);
+      setJob(view.id, { chunks: result.chunks, chunkEncoding: result.encoding });
+    } catch {
+      // chunking is a bonus — the conversion stands on its own
+    }
+  }, [setJob]);
+
+  const setChunkSettings = useCallback(
+    (next: ChunkSettings) => {
+      setChunkSettingsState(next);
+      chunkSettingsRef.current = next;
+      if (!next.enabled) return;
+      // Re-chunk the selected done job from its in-memory markdown (cheap).
+      const selected = jobsRef.current.find((j) => j.id === selectedIdRef.current);
+      if (selected?.markdown) void attachChunks(selected);
+    },
+    [attachChunks],
+  );
+
   /** Load the engine on demand. Safe to call concurrently (pool dedupes). */
   const ensureEngine = useCallback(async (): Promise<boolean> => {
     if (engineRef.current === "ready") return true;
@@ -151,6 +204,7 @@ export function useConverter() {
         };
         setJob(view.id, updated);
         persistDone(updated);
+        void attachChunks(updated);
         setSelectedId((s) => s ?? view.id);
         return;
       }
@@ -194,6 +248,7 @@ export function useConverter() {
         };
         setJob(view.id, updated);
         persistDone(updated);
+        void attachChunks(updated);
         setSelectedId((s) => s ?? view.id);
       } else {
         setJob(view.id, { status: "failed", code: res.code, message: res.message });
@@ -210,7 +265,7 @@ export function useConverter() {
         });
       }
     }
-  }, [ensureEngine, setJob]);
+  }, [attachChunks, ensureEngine, setJob]);
 
   const addFiles = useCallback(
     (files: File[], meta?: { folders?: number; foldersUnsupported?: boolean }) => {
@@ -431,7 +486,7 @@ export function useConverter() {
 
   return {
     jobs, selected, engine, now, exporting,
-    checked, notice, historyCount,
+    checked, notice, historyCount, chunkSettings, setChunkSettings,
     addFiles, cancel, remove, retry, clearFinished,
     exportAll, exportChecked, deleteChecked, copyChecked,
     toggleCheck, clearChecked,

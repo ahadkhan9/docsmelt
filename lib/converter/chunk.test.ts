@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
-import { CHARS_PER_TOKEN, chunkMarkdown, chunkMarkdownAsync, chunkZip, estimateTokens, resolveChunkOptions, shouldChunkInWorker } from "./chunk";
+import { CHARS_PER_TOKEN, chunkMarkdown, chunkMarkdownAsync, chunkSummary, chunkZip, estimateTokens, resolveChunkOptions, shouldChunkInWorker } from "./chunk";
 
 const fenceState = (content: string): "closed" | "open" => {
   let state: string | null = null;
@@ -463,5 +463,20 @@ describe("chunker.worker — the shared handler", () => {
     expect(result.encoding).toBe("cl100k_base");
     expect(result.chunks.length).toBeGreaterThan(0);
     expect(result.chunks[0].tokens).toBeGreaterThan(0);
+  });
+});
+
+describe("chunkSummary", () => {
+  it("computes count, average, tables and oversized", async () => {
+    const { loadTokenizer } = await import("./tokenizer");
+    const tok = await loadTokenizer();
+    const md = `# A\n\n${ANYDOC_TABLE}\n\n${"filler ".repeat(200)}\n\n${ANYDOC_TABLE}`;
+    const chunks = chunkMarkdown(md, { targetTokens: 100 }, tok);
+    const summary = chunkSummary(chunks);
+    expect(summary.count).toBe(chunks.length);
+    expect(summary.avgTokens).toBeGreaterThan(0);
+    expect(summary.tablesKept).toBeGreaterThanOrEqual(1);
+    expect(summary.oversized).toBeGreaterThanOrEqual(0);
+    expect(chunkSummary([])).toEqual({ count: 0, avgTokens: 0, tablesKept: 0, oversized: 0 });
   });
 });

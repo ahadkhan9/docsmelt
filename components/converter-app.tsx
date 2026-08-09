@@ -194,9 +194,12 @@ export default function ConverterApp() {
                   onCopyChecked={c.copyChecked}
                   onClearChecked={c.clearChecked}
                   exporting={c.exporting}
+                  globalPreset={c.chunkSettings.enabled ? c.chunkSettings.preset : undefined}
                 />
                 <IngotPreview
                   job={c.selected}
+                  chunkSettings={c.chunkSettings}
+                  onChunkSettings={c.setChunkSettings}
                   onDownloadMd={c.downloadMarkdown}
                   onDownloadZip={c.downloadZip}
                   onRetry={c.retry}

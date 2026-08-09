@@ -54,6 +54,7 @@ export function FileQueue({
   onCopyChecked,
   onClearChecked,
   exporting,
+  globalPreset,
 }: {
   jobs: JobView[];
   now: number;
@@ -73,6 +74,7 @@ export function FileQueue({
   onCopyChecked: () => Promise<number>;
   onClearChecked: () => void;
   exporting: boolean;
+  globalPreset?: number;
 }) {
   const [copiedN, setCopiedN] = useState<number | null>(null);
   const checkedSet = new Set(checked);
@@ -191,6 +193,7 @@ export function FileQueue({
                 onRetry={() => onRetry(job.id)}
                 onDownloadMd={() => onDownloadMd(job.id)}
                 onDownloadZip={() => onDownloadZip(job.id)}
+                globalPreset={globalPreset}
               />
             ))}
           </AnimatePresence>
@@ -205,6 +208,7 @@ function QueueRow({
   now,
   selected,
   checked,
+  globalPreset,
   onToggleCheck,
   onSelect,
   onCancel,
@@ -217,6 +221,7 @@ function QueueRow({
   now: number;
   selected: boolean;
   checked: boolean;
+  globalPreset?: number;
   onToggleCheck: (range: boolean) => void;
   onSelect: () => void;
   onCancel: () => void;
@@ -257,6 +262,7 @@ function QueueRow({
   };
   const openChunks = () => {
     if (!job.markdown) return;
+    if (globalPreset) setChunkSize(globalPreset as 256 | 512 | 1024);
     setChunkOpen(true);
     void computeChunks();
   };
