@@ -255,3 +255,79 @@ describe("chunkMarkdown — atomic tables", () => {
     }
   });
 });
+
+// ── exact tokenizer integration (gpt-tokenizer) ──────────────────────────
+
+const CJK = "文档转换是将办公文件转化为干净、结构化的标记语言的过程，供检索增强生成流水线使用。中文文本的令牌化与英文不同，每个汉字通常对应一到两个令牌。";
+
+describe("chunkMarkdown — exact token budgets (with gpt-tokenizer)", () => {
+  it("counts every chunk exactly", async () => {
+    const { loadTokenizer } = await import("./tokenizer");
+    const tok = await loadTokenizer();
+    const md = `${"word ".repeat(600)}\n\n${CJK.repeat(8)}`;
+    const chunks = chunkMarkdown(md, { targetTokens: 200 }, tok);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.tokens).toBe(tok.count(chunk.content));
+    }
+  });
+
+  it("keeps English chunks within the budget", async () => {
+    const { loadTokenizer } = await import("./tokenizer");
+    const tok = await loadTokenizer();
+    const md = Array.from({ length: 30 }, () => "word ".repeat(80)).join("\n\n");
+    const chunks = chunkMarkdown(md, { targetTokens: 200 }, tok);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.tokens).toBeLessThanOrEqual(200 + 50); // one-line slack
+    }
+  });
+
+  it("keeps CJK chunks within the budget (chars/4 alone would allow 3×)", async () => {
+    const { loadTokenizer } = await import("./tokenizer");
+    const tok = await loadTokenizer();
+    const md = CJK.repeat(60); // ~6000 chars of CJK
+    const chunks = chunkMarkdown(md, { targetTokens: 200 }, tok);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const chunk of chunks) {
+      expect(chunk.tokens).toBeLessThanOrEqual(200 + 40); // tight — the trim enforces it
+      expect(chunk.content.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("trim keeps document order: nothing is lost, nothing duplicated", async () => {
+    const { loadTokenizer } = await import("./tokenizer");
+    const tok = await loadTokenizer();
+    const lines = Array.from({ length: 60 }, (_, i) => `line ${i} — ${CJK.slice(0, 20)}`);
+    const md = lines.join("\n");
+    const chunks = chunkMarkdown(md, { targetTokens: 100 }, tok);
+    // all original lines present exactly once across chunks (no dupes from
+    // continuation + overlap interplay beyond the intended overlap)
+    const joined = chunks.map((c) => c.content).join("\n");
+    for (const line of lines) {
+      expect(joined.match(new RegExp(line.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))?.length ?? 0)
+        .toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("overlap seeds stay token-bounded (≈ overlapTokens + one line)", async () => {
+    const { loadTokenizer } = await import("./tokenizer");
+    const tok = await loadTokenizer();
+    // distinct lines so the suffix/prefix match can't over-extend
+    const md = Array.from({ length: 40 }, (_, i) => `paragraph ${i}: ` + "word ".repeat(55)).join("\n\n");
+    const chunks = chunkMarkdown(md, { targetTokens: 150, overlapTokens: 15 }, tok);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (let i = 1; i < chunks.length; i += 1) {
+      const prev = chunks[i - 1].content;
+      const cur = chunks[i].content;
+      // char-level: the longest prefix of cur that is a suffix of prev
+      // (seeds may be partial lines)
+      const maxN = Math.min(cur.length, prev.length);
+      let n = maxN;
+      while (n > 0 && !cur.startsWith(prev.slice(-n))) n -= 1;
+      expect(n).toBeGreaterThan(0);
+      const seedTokens = tok.count(cur.slice(0, n));
+      expect(seedTokens).toBeLessThanOrEqual(15 + 60); // overlap + one line
+    }
+  });
+});

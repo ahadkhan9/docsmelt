@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { chunkMarkdown, chunkZip, type RagChunk } from "@/lib/converter/chunk";
 import { refine, type ErrorKind } from "@/lib/converter/errors";
 import { FAMILY_OF, FAMILY_TOKEN, FamilyGlyph, supportsZip } from "@/lib/converter/formats";
+import { loadTokenizer, type Tokenizer } from "@/lib/converter/tokenizer";
 import type { JobView } from "@/lib/converter/useConverter";
 import { stemOf } from "@/lib/converter/zip";
 import { cn, downloadBlob } from "@/lib/utils";
@@ -222,25 +223,43 @@ function QueueRow({
 }) {
   const [copied, setCopied] = useState(false);
   const [chunkOpen, setChunkOpen] = useState(false);
-  const [chunkSize, setChunkSize] = useState<500 | 1000>(1000);
+  const [chunkSize, setChunkSize] = useState<number>(512);
   const [chunks, setChunks] = useState<RagChunk[] | null>(null);
+  const [tokenizer, setTokenizer] = useState<Tokenizer | null>(null);
+  const [chunkLoading, setChunkLoading] = useState(false);
   const family = job.format ? FAMILY_OF[job.format] : undefined;
 
+  const computeChunks = async (size: number) => {
+    if (!job.markdown) return;
+    setChunkLoading(true);
+    try {
+      // Lazy: the ~1 MB tokenizer vocab loads once, on the first open.
+      const tok = await loadTokenizer();
+      setTokenizer(tok);
+      setChunks(chunkMarkdown(job.markdown, { targetTokens: size }, tok));
+    } finally {
+      setChunkLoading(false);
+    }
+  };
   const openChunks = () => {
     if (!job.markdown) return;
-    setChunks(chunkMarkdown(job.markdown, { targetTokens: chunkSize }));
     setChunkOpen(true);
+    void computeChunks(chunkSize);
   };
-  const changeChunkSize = (size: 500 | 1000) => {
+  const changeChunkSize = (size: number) => {
     setChunkSize(size);
-    if (job.markdown) setChunks(chunkMarkdown(job.markdown, { targetTokens: size }));
+    void computeChunks(size);
   };
   const downloadChunks = async () => {
     if (!chunks?.length) return;
     const base = stemOf(job.file.name);
-    const blob = await chunkZip(base, chunks, job.file.name);
+    const label =
+      tokenizer?.encoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k tokens";
+    const blob = await chunkZip(base, chunks, job.file.name, label);
     downloadBlob(blob, `${base}-chunks.zip`);
   };
+  const tokenLabel =
+    tokenizer?.encoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k tokens";
   const active = ACTIVE.has(job.status);
   const elapsed = Math.max(0, Math.round((now - job.startedAt) / 1000));
   const error =
@@ -413,7 +432,7 @@ function QueueRow({
               role="group"
               aria-label="Chunk size in tokens"
             >
-              {([500, 1000] as const).map((size) => (
+              {([256, 512, 1024] as const).map((size) => (
                 <button
                   key={size}
                   onClick={() => changeChunkSize(size)}
@@ -429,11 +448,19 @@ function QueueRow({
                 </button>
               ))}
             </div>
-            <span className="font-mono text-[11px] text-steel">
-              {chunks.length} chunk{chunks.length === 1 ? "" : "s"} · ~
-              {Math.round(chunks.reduce((s, c) => s + c.tokens, 0) / Math.max(1, chunks.length))}{" "}
-              tokens avg
-            </span>
+            {chunkLoading ? (
+              <span className="font-mono text-[11px] text-muted-foreground">
+                loading tokenizer…
+              </span>
+            ) : (
+              <span className="font-mono text-[11px] text-steel">
+                {chunks?.length ?? 0} chunk{chunks?.length === 1 ? "" : "s"} · ~
+                {Math.round(
+                  (chunks ?? []).reduce((s, c) => s + c.tokens, 0) / Math.max(1, chunks?.length ?? 1),
+                )}{" "}
+                {tokenLabel} avg
+              </span>
+            )}
             <div className="ml-auto flex items-center gap-1">
               <Button size="sm" className="min-h-10" onClick={() => void downloadChunks()}>
                 <Archive className="size-3.5" aria-hidden />
