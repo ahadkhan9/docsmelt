@@ -38,6 +38,29 @@ export interface ChunkOptions {
   overlapTokens?: number;
 }
 
+/**
+ * Chunk metadata — enables downstream parent-child retrieval (LlamaIndex
+ * AutoMerging-style) and honest table reporting. Serialized into the
+ * {stem}-chunks.json sidecar.
+ */
+export interface ChunkMeta {
+  /** Heading path (ancestors first) at chunk close — e.g.
+   *  ["# Report", "## Budget"]. */
+  headingPath: string[];
+  /** True when the chunk contains at least one table. */
+  isTable: boolean;
+  /** "2/4" when this chunk is part of a split table — reserved for
+   *  header-repeat row-splitting; atomic tables never split, so null. */
+  tableParts: string | null;
+  /** Index of the chunk where the current section started (the chunk that
+   *  carries the section's heading); null when this chunk starts a
+   *  section itself. Lets a retriever merge continuation chunks back to
+   *  the section root. */
+  parentRef: number | null;
+  /** True when the chunk contains a table larger than the target. */
+  oversizedTable: boolean;
+}
+
 export interface RagChunk {
   /** 1-based. */
   index: number;
@@ -46,8 +69,7 @@ export interface RagChunk {
   content: string;
   /** Exact tokens when a Tokenizer was provided, else the chars/4 estimate. */
   tokens: number;
-  /** True when the chunk contains a table larger than the target. */
-  oversizedTable?: boolean;
+  meta: ChunkMeta;
 }
 
 const FENCE_RE = /^(`{3,}|~{3,})/;
@@ -184,6 +206,8 @@ export function chunkMarkdown(
   let inTable = false;
   let chunkHasTable = false;
   let lastHeading = "";
+  const headingStack: string[] = [];
+  let sectionStartIndex: number | null = null;
   let pendingOverlap: string[] | null = null;
   let pendingContinuation: string[] | null = null;
 
@@ -215,13 +239,25 @@ export function chunkMarkdown(
         }
       }
       const tokens = tokenizer ? tokenizer.count(content) : estimateTokens(content);
+      const firstLine = content.split("\n").find((l) => l.trim() !== "") ?? "";
+      const startsSection =
+        HEADING_RE.test(firstLine) &&
+        !(chunks.length > 0 && chunks[chunks.length - 1].content.trimEnd().endsWith(firstLine));
+      const parentRef = startsSection ? null : sectionStartIndex;
       chunks.push({
         index: chunks.length + 1,
         heading: lastHeading,
         content,
         tokens,
-        oversizedTable: chunkHasTable && content.length > gateChars ? true : undefined,
+        meta: {
+          headingPath: [...headingStack],
+          isTable: chunkHasTable,
+          tableParts: null, // reserved for header-repeat row-splitting
+          parentRef,
+          oversizedTable: chunkHasTable && content.length > gateChars,
+        },
       });
+      if (startsSection) sectionStartIndex = chunks.length;
       // Learn the doc's real chars-per-token so the next gate closes near
       // the budget instead of 3× over (CJK/tables).
       if (tokens > 0) {
@@ -304,18 +340,53 @@ export function chunkMarkdown(
     }
     buffer.push(line);
     bufferChars += lineCost;
-    if (HEADING_RE.test(line)) lastHeading = line;
+    const headingMatch = HEADING_RE.exec(line);
+    if (headingMatch) {
+      const level = headingMatch[0].length - 1;
+      while (headingStack.length > 0) {
+        const top = headingStack[headingStack.length - 1];
+        const topMatch = HEADING_RE.exec(top);
+        const topLevel = topMatch ? topMatch[0].length - 1 : 0;
+        if (topLevel >= level) headingStack.pop();
+        else break;
+      }
+      headingStack.push(line);
+      lastHeading = line;
+    }
   }
   closeChunk();
   return chunks;
 }
 
-/** One .zip per source: numbered chunks + an index file (encoding-honest). */
+/**
+ * Sidecar schema v1 — {stem}-chunks.json. Every chunk carries its meta so
+ * downstream pipelines can rebuild hierarchy (parentRef → section root),
+ * filter tables, and dedupe overlap. Fields are documented on ChunkMeta.
+ */
+export interface ChunkSidecar {
+  schema: 1;
+  encoding: string;
+  source: string;
+  options: { targetTokens: number; overlapTokens: number };
+  chunks: Array<{
+    file: string;
+    index: number;
+    headingPath: string[];
+    tokens: number;
+    isTable: boolean;
+    tableParts: string | null;
+    parentRef: number | null;
+    oversizedTable: boolean;
+  }>;
+}
+
+/** One .zip per source: numbered chunks + an index + the metadata sidecar. */
 export async function chunkZip(
   stem: string,
   chunks: RagChunk[],
   sourceName: string,
   encodingLabel = "tokens",
+  options?: ChunkOptions,
 ): Promise<Blob> {
   const zip = new JSZip();
   for (const chunk of chunks) {
@@ -329,12 +400,32 @@ export async function chunkZip(
     "",
     ...chunks.map(
       (c) =>
-        `- \`${stem}-${String(c.index).padStart(3, "0")}.md\` — ${c.tokens} ${encodingLabel}${c.heading ? ` (${c.heading})` : ""}${c.oversizedTable ? " — oversized table" : ""}`,
+        `- \`${stem}-${String(c.index).padStart(3, "0")}.md\` — ${c.tokens} ${encodingLabel}${c.heading ? ` (${c.heading})` : ""}${c.meta.oversizedTable ? " — oversized table" : ""}`,
     ),
     "",
     "_Chunked by docsmelt in your browser — headings preserved, code fences and tables kept intact._",
   ].join("\n");
   zip.file(`${stem}-index.md`, index);
+  const sidecar: ChunkSidecar = {
+    schema: 1,
+    encoding: encodingLabel,
+    source: sourceName,
+    options: {
+      targetTokens: options?.targetTokens ?? 0,
+      overlapTokens: options?.overlapTokens ?? 0,
+    },
+    chunks: chunks.map((c) => ({
+      file: `${stem}-${String(c.index).padStart(3, "0")}.md`,
+      index: c.index,
+      headingPath: c.meta.headingPath,
+      tokens: c.tokens,
+      isTable: c.meta.isTable,
+      tableParts: c.meta.tableParts,
+      parentRef: c.meta.parentRef,
+      oversizedTable: c.meta.oversizedTable,
+    })),
+  };
+  zip.file(`${stem}-chunks.json`, JSON.stringify(sidecar, null, 2));
   return zip.generateAsync({
     type: "blob",
     compression: "DEFLATE",

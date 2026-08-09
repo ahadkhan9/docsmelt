@@ -212,15 +212,15 @@ describe("chunkMarkdown — atomic tables", () => {
     const owner = chunks.find((c) => c.content.includes("Col"));
     expect(owner).toBeDefined();
     expect(owner!.content).toContain("| row 59 |"); // closer present — never split
-    expect(owner!.oversizedTable).toBe(true);
-    for (const c of chunks) if (c !== owner) expect(c.oversizedTable).toBeUndefined();
+    expect(owner!.meta.oversizedTable).toBe(true);
+    for (const c of chunks) if (c !== owner) expect(c.meta.oversizedTable).toBe(false);
   });
 
   it("delimiter confirmation: a | -led prose line is NOT a table", () => {
     const prose = "# Notes\n\nJust a line | with pipes\n\nand another | pipe line here.";
     const chunks = chunkMarkdown(prose, { targetTokens: 100 });
     // splits normally by size/heading, and no chunk carries the table flag
-    for (const c of chunks) expect(c.oversizedTable).toBeUndefined();
+    for (const c of chunks) expect(c.meta.oversizedTable).toBe(false);
     expect(chunks.map((c) => c.content).join("\n")).toContain("Just a line | with pipes");
   });
 
@@ -230,13 +230,13 @@ describe("chunkMarkdown — atomic tables", () => {
     const codeChunk = chunks.find((c) => c.content.includes("| a | b |"));
     expect(codeChunk).toBeDefined();
     expect(codeChunk!.content).toContain("```"); // fence intact, table flag absent
-    expect(codeChunk!.oversizedTable).toBeUndefined();
+    expect(codeChunk!.meta.oversizedTable).toBeUndefined();
   });
 
   it("CSV-looking prose rows without a delimiter are not tables", () => {
     const md = "# Data\n\nname,value\nIron,1538\nGold,1064\n\nMore text here.";
     const chunks = chunkMarkdown(md, { targetTokens: 100 });
-    for (const c of chunks) expect(c.oversizedTable).toBeUndefined();
+    for (const c of chunks) expect(c.meta.oversizedTable).toBe(false);
   });
 
   it("overlap seeds may carry table rows without breaking the next chunk", () => {
@@ -363,5 +363,68 @@ describe("resolveChunkOptions — presets, custom, overlap", () => {
       targetTokens: 512,
       overlapTokens: 51,
     });
+  });
+});
+
+describe("chunk meta — heading path, parent refs, tables", () => {
+  it("builds heading paths for nested sections", () => {
+    const md = "# Report\n\nIntro.\n\n## Budget\n\nBudget text.\n\n### Q1\n\nQ1 text.";
+    const chunks = chunkMarkdown(md, { targetTokens: 5000, overlapTokens: 0 }); // one chunk
+    const chunk = chunks[0];
+    expect(chunk.meta.headingPath).toEqual(["# Report", "## Budget", "### Q1"]);
+    expect(chunk.meta.parentRef).toBeNull(); // starts a section
+  });
+
+  it("parentRef points continuation chunks at the section start", () => {
+    // a long section split by size: the first chunk starts the section,
+    // the continuation chunk points back at it
+    const md = `# Long\n\n${"filler ".repeat(500)}\n\n${"more ".repeat(200)}`;
+    const chunks = chunkMarkdown(md, { targetTokens: 100, overlapTokens: 0 });
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks[0].meta.parentRef).toBeNull(); // starts the section
+    for (const c of chunks.slice(1)) {
+      expect(c.meta.parentRef).toBe(1); // section root is chunk 1
+      expect(c.meta.headingPath).toEqual(["# Long"]);
+    }
+  });
+
+  it("marks table chunks and keeps tableParts null (atomic tables)", () => {
+    const md = `# T\n\n${ANYDOC_TABLE}`;
+    const chunks = chunkMarkdown(md, { targetTokens: 5000, overlapTokens: 0 });
+    const tableChunk = chunks.find((c) => c.meta.isTable);
+    expect(tableChunk).toBeDefined();
+    expect(tableChunk!.meta.tableParts).toBeNull();
+    expect(tableChunk!.meta.oversizedTable).toBe(false);
+  });
+});
+
+describe("chunkZip sidecar ({stem}-chunks.json, schema v1)", () => {
+  it("emits the schema with every chunk's meta", async () => {
+    const md = `# Report\n\nIntro.\n\n## Budget\n\n${"filler ".repeat(200)}\n\n${ANYDOC_TABLE}`;
+    const chunks = chunkMarkdown(md, { targetTokens: 100, overlapTokens: 10 });
+    const blob = await chunkZip("report", chunks, "report.docx", "cl100k tokens", {
+      targetTokens: 100,
+      overlapTokens: 10,
+    });
+    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
+    const raw = await zip.file("report-chunks.json")!.async("text");
+    const sidecar = JSON.parse(raw);
+    expect(sidecar.schema).toBe(1);
+    expect(sidecar.encoding).toBe("cl100k tokens");
+    expect(sidecar.source).toBe("report.docx");
+    expect(sidecar.options).toEqual({ targetTokens: 100, overlapTokens: 10 });
+    expect(sidecar.chunks.length).toBe(chunks.length);
+    for (const entry of sidecar.chunks) {
+      expect(entry.file).toMatch(/^report-\d{3}\.md$/);
+      expect(typeof entry.headingPath).toBe("object");
+      expect(typeof entry.tokens).toBe("number");
+      expect(typeof entry.isTable).toBe("boolean");
+      expect("tableParts" in entry).toBe(true);
+      expect("parentRef" in entry).toBe(true);
+      expect(typeof entry.oversizedTable).toBe("boolean");
+    }
+    // the index still lists oversized tables via the meta flag
+    const index = await zip.file("report-index.md")!.async("text");
+    expect(index).toContain("RAG chunks");
   });
 });

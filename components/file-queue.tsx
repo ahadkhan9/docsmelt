@@ -269,7 +269,13 @@ function QueueRow({
     const base = stemOf(job.file.name);
     const label =
       tokenizer?.encoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k tokens";
-    const blob = await chunkZip(base, chunks, job.file.name, label);
+    const options = resolveChunkOptions({
+      preset: chunkSize,
+      customTokens: Number(customTokens) || undefined,
+      overlapAuto,
+      overlapTokens: Number(overlapTokens) || undefined,
+    });
+    const blob = await chunkZip(base, chunks, job.file.name, label, options);
     downloadBlob(blob, `${base}-chunks.zip`);
   };
   const tokenLabel =
@@ -486,6 +492,14 @@ function QueueRow({
                   (chunks ?? []).reduce((s, c) => s + c.tokens, 0) / Math.max(1, chunks?.length ?? 1),
                 )}{" "}
                 {tokenLabel} avg
+                {(chunks ?? []).filter((c) => c.meta.isTable).length > 0 && (
+                  <>
+                    {" "}
+                    · {(chunks ?? []).filter((c) => c.meta.isTable).length} table
+                    {(chunks ?? []).filter((c) => c.meta.isTable).length === 1 ? "" : "s"} kept
+                    whole
+                  </>
+                )}
               </span>
             )}
             <div className="ml-auto flex items-center gap-1">
