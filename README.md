@@ -63,7 +63,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the full protocol, pool m
 ```bash
 npm install
 npm run dev      # webpack mode — pinned deliberately (Turbopack has a .wasm asset gap)
-npm test         # vitest suite: protocol, error mapping, formats, edge cases (63 tests)
+npm test         # vitest suite: 137 tests — protocol, chunking, sections, history, PWA, engine
 npm run build    # static export → out/
 ```
 
