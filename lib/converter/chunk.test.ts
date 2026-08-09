@@ -230,7 +230,7 @@ describe("chunkMarkdown — atomic tables", () => {
     const codeChunk = chunks.find((c) => c.content.includes("| a | b |"));
     expect(codeChunk).toBeDefined();
     expect(codeChunk!.content).toContain("```"); // fence intact, table flag absent
-    expect(codeChunk!.meta.oversizedTable).toBeUndefined();
+    expect(codeChunk!.meta.oversizedTable).toBe(false);
   });
 
   it("CSV-looking prose rows without a delimiter are not tables", () => {
