@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "motion/react";
-import { Archive, Check, CircleAlert, Copy, Download, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, Check, CircleAlert, Copy, Download, FileText, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarkdownView } from "./markdown";
 import { refine, type ErrorKind } from "@/lib/converter/errors";
@@ -75,13 +75,21 @@ export function IngotPreview({
           style={{ color: family ? `var(--${FAMILY_TOKEN[family]})` : "var(--muted-foreground)" }}
           aria-hidden
         >
-          {family ? <FamilyGlyph family={family} /> : <CircleAlert className="size-4" />}
+          {job.kind ? (
+            <FileText className="size-4" />
+          ) : family ? (
+            <FamilyGlyph family={family} />
+          ) : (
+            <CircleAlert className="size-4" />
+          )}
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-foreground">{job.file.name}</p>
           <p className="font-mono text-[11px] text-muted-foreground">
             {job.markdown
-              ? `${(job.chars ?? 0).toLocaleString()} chars${job.ms ? ` · ${job.ms} ms` : ""}`
+              ? job.kind
+                ? `already markdown · ${(job.chars ?? 0).toLocaleString()} chars`
+                : `${(job.chars ?? 0).toLocaleString()} chars${job.ms ? ` · ${job.ms} ms` : ""}`
               : active
                 ? job.status === "smelting"
                   ? "smelting…"

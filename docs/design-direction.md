@@ -141,6 +141,9 @@ Everything else is quiet; this is the one bold thing.
 - **Badge** = family dot + mono format name in a `raised` chip
   (e.g. `● docx`). Detection is shown *before* conversion
   ("Detected: DOCX"), and the badge carries the family color through the queue.
+- **Already-markdown files** (`.md`, `.markdown`, `.txt`) get a neutral
+  badge (muted text glyph + mono `md`/`txt` chip) and the queue states
+  "already markdown" — no fake smelt, no engine involved.
 - Unsupported drops show the badge in `mute` with the family color dropped —
   the system says "we don't smelt this" without shouting.
 - Icons render as inline SVG (stroke = currentColor), 16/20/24 px grid, no emoji.

@@ -8,6 +8,7 @@ import {
   Copy,
   Download,
   FileQuestion,
+  FileText,
   RotateCcw,
   Trash2,
   X,
@@ -162,19 +163,29 @@ function QueueRow({
           style={{ color: family ? `var(--${FAMILY_TOKEN[family]})` : "var(--muted-foreground)" }}
           aria-hidden
         >
-          {family ? <FamilyGlyph family={family} /> : <FileQuestion className="size-4" />}
+          {job.kind ? (
+            <FileText className="size-4" />
+          ) : family ? (
+            <FamilyGlyph family={family} />
+          ) : (
+            <FileQuestion className="size-4" />
+          )}
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="truncate text-sm font-medium text-foreground">{job.file.name}</p>
-            {job.format && family && (
+            {job.kind ? (
+              <span className="shrink-0 rounded-full border border-border/70 bg-background px-1.5 py-px font-mono text-[10px] uppercase tracking-wide text-steel">
+                {job.kind}
+              </span>
+            ) : job.format && family ? (
               <span
                 className="shrink-0 rounded-full border border-border/70 bg-background px-1.5 py-px font-mono text-[10px] uppercase tracking-wide"
                 style={{ color: `var(--${FAMILY_TOKEN[family]})` }}
               >
                 {job.format}
               </span>
-            )}
+            ) : null}
           </div>
           <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
             {formatSize(job.file.size)}
@@ -195,8 +206,11 @@ function QueueRow({
             </Button>
           ) : job.status === "done" ? (
             <>
-              <span className="mr-1 font-mono text-[11px] text-fam-sheet" title={`${job.ms} ms`}>
-                {job.ms} ms
+              <span
+                className="mr-1 font-mono text-[11px] text-fam-sheet"
+                title={job.kind ? "no conversion needed" : `${job.ms} ms`}
+              >
+                {job.kind ? "already markdown" : `${job.ms} ms`}
               </span>
               <Button variant="ghost" size="icon-lg" className="min-h-11 min-w-11" aria-label="Copy markdown" title="Copy markdown" onClick={copy}>
                 {copied ? <Check className="size-4 text-fam-sheet" /> : <Copy className="size-4" />}

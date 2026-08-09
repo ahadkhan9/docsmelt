@@ -27,7 +27,10 @@ export default function ConverterApp() {
     const key = `${last.id}:${last.status}`;
     if (key === lastKey.current) return;
     lastKey.current = key;
-    if (last.status === "done") setAnnouncement(`Converted ${last.file.name}.`);
+    if (last.status === "done")
+      setAnnouncement(
+        last.kind ? `${last.file.name} is already markdown.` : `Converted ${last.file.name}.`,
+      );
     else if (last.status === "failed") {
       const title = refine(last.file.name, last.format, (last.code ?? "engine") as ErrorKind).title;
       setAnnouncement(`${last.file.name}: ${title}.`);
@@ -96,6 +99,9 @@ export default function ConverterApp() {
               </p>
               <p className="mt-2 max-w-2xl font-mono text-[11px] leading-relaxed text-muted-foreground">
                 {FORMATS}
+              </p>
+              <p className="mt-1.5 font-mono text-[11px] text-muted-foreground">
+                Markdown and plain text pass through unchanged — no conversion needed.
               </p>
             </div>
             <div className="font-mono text-[11px] leading-relaxed text-muted-foreground">

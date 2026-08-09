@@ -113,10 +113,36 @@ Firecrawl's Parse API is the hint, with a note that it's the only path that
 would leave the browser); `unsupported` + `.csv` name → "CSV needs its
 format named" (CSV has no signature; the extension names it).
 
+## Pass-through — files that are already Markdown
+
+`.md`, `.markdown` and plain-text `.txt` files never touch the engine: they
+are already the output format. The hook detects them client-side
+(`lib/converter/passthrough.ts`) before any pool interaction and the job
+completes as `done` with `kind: 'md' | 'txt'` — the queue says "already
+markdown", the preview renders as-is, "Download .md" passes the text through.
+
+**Job-type choice — main thread only, no protocol change.** The worker is a
+wasm executor; a pass-through has no wasm work, so routing it through the
+pool would force the 6.5 MB engine to download for files that don't need it.
+The engine therefore loads *lazily on demand*: `ensureReady` now runs inside
+the per-file flow, triggered only by the first file that needs conversion —
+a Markdown-only session never loads the engine at all. The worker protocol
+is untouched.
+
+Detection: `.md`/`.markdown` are trusted by name (case-insensitive; a
+`.md` file is markdown by convention). `.txt` is decided by a content peek
+— the first 8 KB decode as UTF-8 and must be ≥90% printable (whitespace
+counts; NULs, other C0 controls, and decode failures count against), or the
+file falls through to the engine's unsupported path. CSV is deliberately
+NOT passed through (the engine converts it to a GFM table — real value).
+
 ## Conversion flow (per file)
 
-1. **Detect** — bytes are read and transferred to a worker; the format is
-   returned for the badge before any conversion work starts.
+0. **Pass-through?** — bytes are read; `detectPassThrough(name, bytes)`.
+   Markdown/plain text complete immediately (no worker, no engine).
+1. **Detect** — bytes are transferred to a worker; the format is
+   returned for the badge before any conversion work starts. The engine
+   loads lazily here, on first need.
 2. **Convert** — a fresh read of the file (the first read was transferred)
    goes to `toMarkdownBytes` (or `toDocument` when the .zip is asked for).
 3. **Result** — the markdown lands in the ingot pane; the row shows honest

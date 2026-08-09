@@ -67,15 +67,21 @@ export function MarkdownView({ source, className }: { source: string; className?
           ),
           td: ({ node: _n, ...p }) => <td className="border border-paper-line px-3 py-2 align-top" {...p} />,
           img: ({ node: _n, src, alt, ...p }) => {
-            // react-markdown types src/alt as string | Blob — a Blob or an
-            // asset-reference src is an embedded image (alt-only in the md).
+            // react-markdown types src/alt as string | Blob. Engine output
+            // references assets (alt-only) — a chip with "in the .zip".
+            // Passed-through markdown may reference local files — those are
+            // not bundled either, but the chip says so honestly.
+            const srcStr = typeof src === "string" ? src : "";
+            const remote = /^(https?:|data:|blob:)/.test(srcStr);
             const embedded =
-              src instanceof Blob || EMBEDDED_SRC.test(typeof src === "string" ? src : "");
+              src instanceof Blob || EMBEDDED_SRC.test(srcStr) || (srcStr !== "" && !remote);
             return embedded ? (
               <span className="my-3 inline-flex max-w-full items-center gap-2 rounded-lg border border-dashed border-paper-line bg-[#f1f3f4] px-3 py-2 text-sm text-paper-muted">
                 <Image className="size-4 shrink-0" aria-hidden />
                 <span className="truncate">{typeof alt === "string" && alt ? alt : "Embedded image"}</span>
-                <span className="font-mono text-[10px] uppercase tracking-wide">in the .zip</span>
+                <span className="font-mono text-[10px] uppercase tracking-wide">
+                  {src instanceof Blob || EMBEDDED_SRC.test(srcStr) ? "in the .zip" : "not included"}
+                </span>
               </span>
             ) : (
               <img

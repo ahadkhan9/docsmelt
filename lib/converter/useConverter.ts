@@ -1,6 +1,8 @@
 /**
  * The converter hook — all job state lives here; the pool is a module-level
- * singleton. Per-file flow: detect → badge → convert → done/failed.
+ * singleton. Per-file flow: pass-through check → detect → badge → convert →
+ * done/failed. The wasm engine loads lazily, only when the first file
+ * actually needs it (Markdown/plain-text files never trigger it).
  * Progress is indeterminate by design (a synchronous wasm call can't be
  * chunked) — rows show honest elapsed time, never fake percentages.
  */
@@ -9,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AnyFormat, Document } from "./protocol";
 import { ConverterPool } from "./pool";
+import { decodeText, detectPassThrough, type PassThroughKind } from "./passthrough";
 import { zipDocument } from "./zip";
 
 let pool: ConverterPool | null = null;
@@ -24,6 +27,8 @@ export interface JobView {
   file: File;
   status: JobStatus;
   format?: AnyFormat;
+  /** Set when the file passed through without the engine (md/txt). */
+  kind?: PassThroughKind;
   code?: string;
   message?: string;
   markdown?: string;
@@ -56,21 +61,63 @@ export function useConverter() {
   const keysRef = useRef(new Map<string, JobKey>());
   const jobsRef = useRef<JobView[]>([]);
   jobsRef.current = jobs;
+  const engineRef = useRef<EngineState>("cold");
+  engineRef.current = engine;
 
   const setJob = useCallback((id: string, patch: Partial<JobView>) => {
     setJobs((list) => list.map((j) => (j.id === id ? { ...j, ...patch } : j)));
+  }, []);
+
+  /** Load the engine on demand. Safe to call concurrently (pool dedupes). */
+  const ensureEngine = useCallback(async (): Promise<boolean> => {
+    if (engineRef.current === "ready") return true;
+    if (engineRef.current === "error") return false;
+    setEngine("loading");
+    try {
+      await getPool().ensureReady();
+      setEngine("ready");
+      return true;
+    } catch {
+      setEngine("error");
+      return false;
+    }
   }, []);
 
   const run = useCallback(async (view: JobView) => {
     const key = keysRef.current.get(view.id);
     if (!key) return;
     try {
+      const bytes = new Uint8Array(await view.file.arrayBuffer());
+      if (key.cancelled) return;
+
+      // Pass-through: already Markdown or plain text — no engine involved.
+      const passThrough = detectPassThrough(view.file.name, bytes);
+      if (passThrough) {
+        const markdown = decodeText(bytes);
+        setJob(view.id, {
+          status: "done",
+          kind: passThrough,
+          markdown,
+          chars: markdown.length,
+        });
+        setSelectedId((s) => s ?? view.id);
+        return;
+      }
+
+      setJob(view.id, { status: "detecting" });
+      if (!(await ensureEngine())) {
+        setJob(view.id, {
+          status: "failed",
+          code: "engine",
+          message: "The conversion engine failed to load. Reload the page and try again.",
+        });
+        return;
+      }
+      if (key.cancelled) return;
+
       // Detect: bytes are transferred zero-copy to the worker (detached
       // after postMessage) — the convert pass re-reads the file.
-      const detectBytes = new Uint8Array(await view.file.arrayBuffer());
-      if (key.cancelled) return;
-      setJob(view.id, { status: "detecting" });
-      const detect = getPool().enqueue("detect", view.file.name, detectBytes);
+      const detect = getPool().enqueue("detect", view.file.name, bytes);
       key.poolJob = detect.id;
       const d = await detect.promise;
       if (key.cancelled) return;
@@ -109,39 +156,18 @@ export function useConverter() {
         });
       }
     }
-  }, [setJob]);
+  }, [ensureEngine, setJob]);
 
-  const addFiles = useCallback(async (files: File[]) => {
+  const addFiles = useCallback((files: File[]) => {
     if (files.length === 0) return;
-    let engineState: EngineState = engine;
-    if (engine === "cold") {
-      engineState = "loading";
-      setEngine("loading");
-      try {
-        await getPool().ensureReady();
-        engineState = "ready";
-        setEngine("ready");
-      } catch {
-        engineState = "error";
-        setEngine("error");
-      }
-    }
     for (const file of files) {
       const id = crypto.randomUUID();
       keysRef.current.set(id, { cancelled: false });
       setJobs((list) => [...list, { id, file, status: "queued", startedAt: Date.now() }]);
       const view: JobView = { id, file, status: "queued", startedAt: Date.now() };
-      if (engineState === "error") {
-        setJob(id, {
-          status: "failed",
-          code: "engine",
-          message: "The conversion engine failed to load. Reload the page and try again.",
-        });
-      } else {
-        void run(view);
-      }
+      void run(view);
     }
-  }, [engine, run, setJob]);
+  }, [run]);
 
   const cancel = useCallback((id: string) => {
     const key = keysRef.current.get(id);
@@ -180,7 +206,10 @@ export function useConverter() {
   const downloadMarkdown = useCallback((id: string) => {
     const view = jobsRef.current.find((j) => j.id === id);
     if (!view?.markdown) return;
-    download(new Blob([view.markdown], { type: "text/markdown;charset=utf-8" }), `${view.file.name.replace(/\.[^.]+$/, "")}.md`);
+    download(
+      new Blob([view.markdown], { type: "text/markdown;charset=utf-8" }),
+      `${view.file.name.replace(/\.[^.]+$/, "")}.md`,
+    );
   }, []);
 
   const downloadZip = useCallback(async (id: string) => {
