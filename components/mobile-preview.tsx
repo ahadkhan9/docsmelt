@@ -7,8 +7,6 @@ import { ChunkBlock, SectionBlock } from "./preview-blocks";
 import { MarkdownView } from "./markdown";
 import { chunkSummary, type RagChunk } from "@/lib/converter/chunk";
 import { buildContents, rovingIndex } from "@/lib/converter/contents";
-import { PreviewSelectorBar } from "./preview-selector-bar";
-import { buildSelectorModel } from "@/lib/converter/selector";
 import { parseSections, sectionForHeading } from "@/lib/converter/sections";
 import { cn } from "@/lib/utils";
 
@@ -38,10 +36,11 @@ export function MobilePreview({
   const outline = useMemo(() => parseSections(markdown), [markdown]);
   const summary = useMemo(() => (chunks ? chunkSummary(chunks) : null), [chunks]);
   const contents = useMemo(() => buildContents(outline, chunks), [outline, chunks]);
-  const selector = useMemo(() => buildSelectorModel(outline, chunks, tokenLabel), [outline, chunks, tokenLabel]);
   const paneRef = useRef<HTMLDivElement>(null);
+  const contentsBtnRef = useRef<HTMLButtonElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const prevFocusRef = useRef<HTMLElement | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeChunk, setActiveChunk] = useState<number | null>(null);
   const [progress, setProgress] = useState(0);
@@ -123,10 +122,39 @@ export function MobilePreview({
     [jumpTo],
   );
 
-  // Focus the close button on open; Esc closes.
+  // Focus the close button on open, return focus to the trigger on close,
+  // and keep Tab inside the modal (focus trap) while it is open.
   useEffect(() => {
-    if (open) closeBtnRef.current?.focus();
+    if (open) {
+      prevFocusRef.current = document.activeElement as HTMLElement | null;
+      closeBtnRef.current?.focus();
+    } else if (prevFocusRef.current) {
+      prevFocusRef.current.focus();
+      prevFocusRef.current = null;
+    }
   }, [open]);
+  const onDrawerKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Tab") return;
+    const container = e.currentTarget as HTMLElement;
+    const focusables = Array.from(
+      container.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+    if (e.shiftKey) {
+      if (active === first || active === container || active === null) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else if (active === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -145,30 +173,23 @@ export function MobilePreview({
     buttons[next]?.focus();
   };
 
-  const spyValue = chunkMode
-    ? activeChunk
-      ? `chunk:${activeChunk}`
-      : null
-    : activeId
-      ? `section:${activeId}`
-      : null;
-
   const activeOutlineId =
     chunkMode && activeChunk && chunks
       ? (sectionForHeading(outline, chunks[activeChunk - 1]?.meta.headingPath ?? [])?.id ??
         activeId)
       : activeId;
 
+  // The fixed Contents button carries the live position — the reading
+  // surface always says where you are, without a second nav surface.
+  const positionLabel =
+    chunkMode && activeChunk
+      ? `Chunk ${activeChunk}`
+      : activeId && activeId !== "preamble"
+        ? (outline.sections.find((s) => s.id === activeId)?.text ?? null)
+        : null;
+
   return (
     <div className="relative flex h-full min-h-0 flex-col">
-      {/* the Selector Bar — native select + pager + counter (Flow B: chunks,
-          Flow A: sections); gated to ≥2 items */}
-      <PreviewSelectorBar
-        model={selector}
-        value={spyValue ?? ""}
-        kind={chunkMode ? "chunk" : "section"}
-        onJump={jumpTo}
-      />
       {/* content scroller — plain, no sticky, no nested scroll containers */}
       <div
         ref={paneRef}
@@ -222,16 +243,18 @@ export function MobilePreview({
         />
       </div>
 
-      {/* the fixed Contents button — thumb-reachable, never scrolls away */}
+      {/* the fixed Contents button — thumb-reachable, never scrolls away,
+          and position-aware (shows the active section/chunk) */}
       <button
+        ref={contentsBtnRef}
         onClick={() => setOpen(true)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        aria-label="Open contents"
-        className="fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-3 z-40 flex h-12 items-center gap-2 rounded-full border border-molten/60 bg-background/95 px-4 font-mono text-[12px] uppercase tracking-wider text-foreground shadow-lg transition-colors duration-150 active:scale-[0.97]"
+        aria-label={positionLabel ? `Contents — ${positionLabel}` : "Open contents"}
+        className="fixed bottom-[calc(env(safe-area-inset-bottom)+12px)] left-3 z-40 flex h-12 max-w-[72vw] items-center gap-2 rounded-full border border-molten/60 bg-background/95 px-4 font-mono text-[12px] uppercase tracking-wider text-foreground shadow-lg transition-colors duration-150 active:scale-[0.97]"
       >
-        <List className="size-4 text-molten" aria-hidden />
-        Contents
+        <List className="size-4 shrink-0 text-molten" aria-hidden />
+        <span className="truncate">Contents{positionLabel ? ` · ${positionLabel}` : ""}</span>
       </button>
 
       {/* the TOC drawer */}
@@ -242,7 +265,7 @@ export function MobilePreview({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="fixed inset-0 z-50 bg-foundry/60"
+            className="fixed inset-0 z-50 bg-background/60"
             onClick={() => setOpen(false)}
           >
             <motion.div
@@ -254,6 +277,7 @@ export function MobilePreview({
               exit={{ y: "100%" }}
               transition={{ duration: 0.2, ease: "easeOut" }}
               onClick={(e) => e.stopPropagation()}
+              onKeyDown={onDrawerKeyDown}
               className="absolute inset-x-0 bottom-0 max-h-[75dvh] overflow-hidden rounded-t-2xl border-t border-border bg-card"
             >
               <div className="flex items-center justify-between border-b border-border/60 px-4 py-2.5">
@@ -288,7 +312,7 @@ export function MobilePreview({
                   if (item.kind === "chunks-head" || item.kind === "sections-head") {
                     return (
                       <li key={item.kind}>
-                        <p className="px-3 pb-1 pt-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                        <p className="px-3 pb-1 pt-3 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
                           {item.kind === "chunks-head" ? "Chunks" : "Sections"}
                         </p>
                       </li>
@@ -309,7 +333,7 @@ export function MobilePreview({
                           )}
                           style={{ paddingLeft: `${12 + (Math.min(item.level, 4) - 1) * 12}px` }}
                         >
-                          <span className="font-display text-sm font-semibold leading-none text-muted-foreground/70">
+                          <span className="font-display text-base font-semibold leading-none text-muted-foreground">
                             {String(item.index).padStart(2, "0")}
                           </span>
                           <span className="truncate">{item.text}</span>

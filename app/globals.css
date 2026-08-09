@@ -47,6 +47,11 @@
   --color-paper-foreground: var(--paper-foreground);
   --color-paper-muted: var(--paper-muted);
   --color-paper-line: var(--paper-line);
+  --color-paper-chip: var(--paper-chip);
+  --color-paper-active: var(--paper-active);
+  --color-paper-code: var(--paper-code);
+  --color-paper-th: var(--paper-th);
+  --color-paper-ok: var(--paper-ok);
   --color-link: var(--link);
   --color-fam-word: var(--fam-word);
   --color-fam-pdf: var(--fam-pdf);
@@ -108,6 +113,11 @@
   --paper-foreground: #1f2328;
   --paper-muted: #59616c;
   --paper-line: #d9dee1;
+  --paper-chip: #f1f3f4;
+  --paper-active: #e4e8ea;
+  --paper-code: #e9ecee;
+  --paper-th: #eceef0;
+  --paper-ok: #1f6b3f; /* paper-safe success — ≥4.5:1 on --paper */
   --link: #2e5ba8;
   --fam-word: #7fa8f0;
   --fam-pdf: #f08a7c;

@@ -2,6 +2,13 @@
 
 > Design note for the mobile preview rework. The round-2 sticky chip strip
 > is replaced by a dedicated touch-first component.
+>
+> **Round 8 (2026-08-10):** the round-7 Selector Bar (see
+> `preview-layout-research.md`) was removed — it duplicated the drawer, and
+> the docstring's "the phone's ONLY navigation" guarantee is now true again.
+> The fixed Contents button is position-aware: it shows the active
+> section/chunk ("Contents · 04 Budget"), so the reading surface always
+> says where you are without a second nav surface.
 
 ## 1. Why the phone controls failed (evidence)
 

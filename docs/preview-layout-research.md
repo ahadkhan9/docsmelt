@@ -1,5 +1,14 @@
 # md preview layout v2 — mobile-first chunk-selector research
 
+> **Superseded (round 8, 2026-08-10):** the toolbar (A+C) recommended here
+> was shipped, then removed. Navigation is now ONE surface per breakpoint —
+> the outline/chunk rail on desktop, and the Contents drawer on mobile,
+> whose fixed trigger button is position-aware ("Contents · 04 Budget" /
+> "· Chunk 12"). Two always-visible jump surfaces (toolbar + drawer, or
+> rail + toolbar) read as redundancy to the user. The native-select research
+> below stays as the reference if a single precise-jump picker is ever
+> reconsidered.
+
 > Analysis-only brief (round 6). Grounded in the current components
 > (mobile-preview.tsx, preview-blocks.tsx, ingot-preview.tsx,
 > lib/converter/contents.ts), the shipped research notes

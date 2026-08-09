@@ -46,11 +46,11 @@ export function MarkdownView({ source, className }: { source: string; className?
             c?.includes("language-") ? (
               <code className={c} {...p} />
             ) : (
-              <code className="rounded bg-[#e9ecee] px-1 py-0.5 font-mono text-[0.85em]" {...p} />
+              <code className="rounded bg-paper-code px-1 py-0.5 font-mono text-[0.85em]" {...p} />
             ),
           pre: ({ node: _n, ...p }) => (
             <pre
-              className="mb-4 overflow-x-auto rounded-lg border border-paper-line bg-[#f1f3f4] p-4 font-mono text-[13px] leading-relaxed scroll-thin"
+              className="mb-4 overflow-x-auto rounded-lg border border-paper-line bg-paper-chip p-4 font-mono text-[13px] leading-relaxed scroll-thin"
               {...p}
             />
           ),
@@ -63,7 +63,7 @@ export function MarkdownView({ source, className }: { source: string; className?
           tbody: ({ node: _n, ...p }) => <tbody {...p} />,
           tr: ({ node: _n, ...p }) => <tr className="border-b border-paper-line" {...p} />,
           th: ({ node: _n, ...p }) => (
-            <th className="border border-paper-line bg-[#eceef0] px-3 py-2 text-left font-semibold" {...p} />
+            <th className="border border-paper-line bg-paper-th px-3 py-2 text-left font-semibold" {...p} />
           ),
           td: ({ node: _n, ...p }) => <td className="border border-paper-line px-3 py-2 align-top" {...p} />,
           img: ({ node: _n, src, alt, ...p }) => {
@@ -76,10 +76,10 @@ export function MarkdownView({ source, className }: { source: string; className?
             const embedded =
               src instanceof Blob || EMBEDDED_SRC.test(srcStr) || (srcStr !== "" && !remote);
             return embedded ? (
-              <span className="my-3 inline-flex max-w-full items-center gap-2 rounded-lg border border-dashed border-paper-line bg-[#f1f3f4] px-3 py-2 text-sm text-paper-muted">
+              <span className="my-3 inline-flex max-w-full items-center gap-2 rounded-lg border border-dashed border-paper-line bg-paper-chip px-3 py-2 text-sm text-paper-muted">
                 <Image className="size-4 shrink-0" aria-hidden />
                 <span className="truncate">{typeof alt === "string" && alt ? alt : "Embedded image"}</span>
-                <span className="font-mono text-[10px] uppercase tracking-wide">
+                <span className="font-mono text-[11px] uppercase tracking-wide">
                   {src instanceof Blob || EMBEDDED_SRC.test(srcStr) ? "in the .zip" : "not included"}
                 </span>
               </span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Archive,
@@ -11,23 +11,14 @@ import {
   FileText,
   MoreHorizontal,
   RotateCcw,
-  Scissors,
   Trash2,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  chunkMarkdownAsync,
-  chunkZip,
-  resolveChunkOptions,
-  type RagChunk,
-} from "@/lib/converter/chunk";
-import { CHUNK_PANEL_ERROR, chunkPanelVisible } from "@/lib/converter/chunk-panel";
 import { refine, type ErrorKind } from "@/lib/converter/errors";
 import { FAMILY_OF, FAMILY_TOKEN, FamilyGlyph, supportsZip } from "@/lib/converter/formats";
 import type { JobView } from "@/lib/converter/useConverter";
-import { stemOf } from "@/lib/converter/zip";
-import { cn, downloadBlob } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 const formatSize = (bytes: number): string => {
   if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(1)} MB`;
@@ -55,8 +46,8 @@ export function FileQueue({
   onExportChecked,
   onCopyChecked,
   onClearChecked,
+  onCancelExport,
   exporting,
-  globalPreset,
 }: {
   jobs: JobView[];
   now: number;
@@ -75,16 +66,35 @@ export function FileQueue({
   onExportChecked: () => void;
   onCopyChecked: () => Promise<number>;
   onClearChecked: () => void;
+  /** Aborts the running batch export (the Export all button becomes it). */
+  onCancelExport: () => void;
   exporting: boolean;
-  globalPreset?: number;
 }) {
   const [copiedN, setCopiedN] = useState<number | null>(null);
+  const [armed, setArmed] = useState<"remove" | "clear" | null>(null);
+  const armTimer = useRef<number | null>(null);
   const checkedSet = new Set(checked);
   const doneCount = jobs.filter((j) => j.status === "done").length;
+  const restoredDone = jobs.filter((j) => j.status === "done" && j.restored).length;
+  const exportableCount = doneCount - restoredDone;
   const finished = jobs.some((j) => ["done", "failed", "cancelled"].includes(j.status));
   const anyCheckedDone = checked.some(
     (id) => jobs.find((j) => j.id === id)?.status === "done",
   );
+
+  /** Two-step inline confirmation for destructive batch actions: first
+   *  click arms ("Remove 3?"), the second within 3 s executes. */
+  const confirm = (kind: "remove" | "clear", action: () => void) => {
+    if (armed === kind) {
+      if (armTimer.current) window.clearTimeout(armTimer.current);
+      setArmed(null);
+      action();
+    } else {
+      setArmed(kind);
+      if (armTimer.current) window.clearTimeout(armTimer.current);
+      armTimer.current = window.setTimeout(() => setArmed(null), 3000);
+    }
+  };
 
   const copyChecked = async () => {
     const n = await onCopyChecked();
@@ -94,23 +104,58 @@ export function FileQueue({
     }
   };
 
+  const exportTitle =
+    restoredDone > 0
+      ? `Export ${exportableCount} converted file${exportableCount === 1 ? "" : "s"} as one .zip — ${restoredDone} restored skipped (no original bytes)`
+      : `Export ${exportableCount} converted file${exportableCount === 1 ? "" : "s"} as one .zip`;
+
   return (
     <div className="flex max-h-[600px] flex-col overflow-hidden rounded-2xl border border-border bg-card lg:max-h-none">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
-        <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-          Queue{" "}
-          <span className="text-foreground">
-            {doneCount}/{jobs.length}
-          </span>
-        </h2>
-        {checked.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-1">
-            <span className="mr-1 font-mono text-[11px] text-steel">
-              {checked.length} selected
+      <div className="flex flex-col">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
+          <h2 className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
+            Queue{" "}
+            <span className="text-foreground">
+              {doneCount}/{jobs.length}
             </span>
-            <Button variant="secondary" size="sm" className="min-h-10" onClick={onDeleteChecked}>
+          </h2>
+          {/* Global actions — always visible, so checking rows never hides them. */}
+          <div className="flex flex-wrap items-center gap-1">
+            {exportableCount > 0 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="min-h-10"
+                onClick={exporting ? onCancelExport : onExportAll}
+                title={exporting ? "Click to cancel the export" : exportTitle}
+              >
+                <Archive className="size-3.5" aria-hidden />
+                {exporting ? "Cancel export…" : "Export all"}
+              </Button>
+            )}
+            {finished && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="min-h-10"
+                onClick={() => confirm("clear", onClearFinished)}
+              >
+                {armed === "clear" ? "Clear finished?" : "Clear finished"}
+              </Button>
+            )}
+          </div>
+        </div>
+        {checked.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1 border-b border-border/60 bg-accent/30 px-4 py-2">
+            <span className="mr-1 font-mono text-[11px] text-steel">{checked.length} selected</span>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="min-h-10"
+              onClick={() => confirm("remove", onDeleteChecked)}
+            >
               <Trash2 className="size-3.5" aria-hidden />
-              Delete
+              {armed === "remove" ? `Remove ${checked.length}?` : "Remove"}
             </Button>
             <Button
               variant="secondary"
@@ -143,31 +188,6 @@ export function FileQueue({
               <X className="size-4" />
             </Button>
           </div>
-        ) : (
-          <div className="flex items-center gap-1">
-            {doneCount > 0 && (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="min-h-10"
-                onClick={onExportAll}
-                disabled={exporting}
-                title={
-                  exporting
-                    ? "Packing files…"
-                    : `Export ${doneCount} converted file${doneCount === 1 ? "" : "s"} as one .zip`
-                }
-              >
-                <Archive className="size-3.5" aria-hidden />
-                {exporting ? "Exporting…" : "Export all"}
-              </Button>
-            )}
-            {finished && (
-              <Button variant="ghost" size="sm" className="min-h-10" onClick={onClearFinished}>
-                Clear finished
-              </Button>
-            )}
-          </div>
         )}
       </div>
       {jobs.length === 0 ? (
@@ -195,7 +215,6 @@ export function FileQueue({
                 onRetry={() => onRetry(job.id)}
                 onDownloadMd={() => onDownloadMd(job.id)}
                 onDownloadZip={() => onDownloadZip(job.id)}
-                globalPreset={globalPreset}
               />
             ))}
           </AnimatePresence>
@@ -210,7 +229,6 @@ function QueueRow({
   now,
   selected,
   checked,
-  globalPreset,
   onToggleCheck,
   onSelect,
   onCancel,
@@ -223,7 +241,6 @@ function QueueRow({
   now: number;
   selected: boolean;
   checked: boolean;
-  globalPreset?: number;
   onToggleCheck: (range: boolean) => void;
   onSelect: () => void;
   onCancel: () => void;
@@ -232,70 +249,8 @@ function QueueRow({
   onDownloadMd: () => void;
   onDownloadZip: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
-  const [chunkOpen, setChunkOpen] = useState(false);
-  const [chunkSize, setChunkSize] = useState<256 | 512 | 1024>(512);
-  const [customTokens, setCustomTokens] = useState("");
-  const [overlapAuto, setOverlapAuto] = useState(true);
-  const [overlapTokens, setOverlapTokens] = useState("");
-  const [chunks, setChunks] = useState<RagChunk[] | null>(null);
-  const [encoding, setEncoding] = useState("cl100k_base");
-  const [chunkLoading, setChunkLoading] = useState(false);
-  const [chunkError, setChunkError] = useState<string | null>(null);
   const family = job.format ? FAMILY_OF[job.format] : undefined;
-
-  const computeChunks = async () => {
-    if (!job.markdown) return;
-    setChunkLoading(true);
-    try {
-      // Small docs chunk on the main thread; large ones (>2 MB) offload to
-      // a one-shot worker. The tokenizer vocab loads lazily either way.
-      const options = resolveChunkOptions({
-        preset: chunkSize,
-        customTokens: Number(customTokens) || undefined,
-        overlapAuto,
-        overlapTokens: Number(overlapTokens) || undefined,
-      });
-      const result = await chunkMarkdownAsync(job.markdown, options);
-      setEncoding(result.encoding);
-      setChunks(result.chunks);
-      setChunkError(null);
-    } catch {
-      // A failure must NEVER collapse the panel (the regression this fix
-      // pins): the error state keeps it visible with an honest message.
-      setChunkError(CHUNK_PANEL_ERROR);
-    } finally {
-      setChunkLoading(false);
-    }
-  };
-  const openChunks = () => {
-    if (!job.markdown) return;
-    if (globalPreset) setChunkSize(globalPreset as 256 | 512 | 1024);
-    setChunkError(null);
-    setChunkOpen(true);
-    void computeChunks();
-  };
-  const changeChunkSize = (size: 256 | 512 | 1024) => {
-    setChunkSize(size);
-    void computeChunks();
-  };
-  const downloadChunks = async () => {
-    if (!chunks?.length) return;
-    const base = stemOf(job.file.name);
-    const label =
-      encoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k_base tokens";
-    const options = resolveChunkOptions({
-      preset: chunkSize,
-      customTokens: Number(customTokens) || undefined,
-      overlapAuto,
-      overlapTokens: Number(overlapTokens) || undefined,
-    });
-    const blob = await chunkZip(base, chunks, job.file.name, label, options);
-    downloadBlob(blob, `${base}-chunks.zip`);
-  };
-  const tokenLabel =
-    encoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k_base tokens";
   const active = ACTIVE.has(job.status);
   const elapsed = Math.max(0, Math.round((now - job.startedAt) / 1000));
   const error =
@@ -303,23 +258,14 @@ function QueueRow({
       ? refine(job.file.name, job.format, (job.code ?? "engine") as ErrorKind)
       : null;
 
-  const copy = async () => {
-    if (!job.markdown) return;
-    try {
-      await navigator.clipboard.writeText(job.markdown);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // clipboard unavailable — .md download is the fallback
-    }
-  };
-
 
   /** Row actions in primary-first order. `labeled` renders the mobile
-   *  strip variant (icon + text, 44px targets); icon-only otherwise. */
+   *  strip variant (icon + text, 44px targets); icon-only otherwise.
+   *  Whole-job Copy lives in the ingot header and chunking in the ingot's
+   *  Chunking switch — neither is duplicated on rows. */
   const buildActions = (labeled: boolean) => {
     const cls = labeled ? "min-h-11" : "min-h-11 min-w-11";
-    const iconCls = labeled ? "size-4" : "size-4";
+    const iconCls = "size-4";
     const withLabel = (icon: React.ReactNode, label: string) => (
       <>
         {icon}
@@ -342,29 +288,19 @@ function QueueRow({
         <Button key="md" variant="ghost" className={cls} aria-label="Download .md" title="Download .md" onClick={stop(onDownloadMd)}>
           {labeled ? withLabel(<Download className={iconCls} aria-hidden />, "Download .md") : <Download className={iconCls} />}
         </Button>,
-        <Button key="copy" variant="ghost" className={cls} aria-label="Copy markdown" title="Copy markdown" onClick={stop(copy)}>
-          {labeled
-            ? withLabel(copied ? <Check className={iconCls} aria-hidden /> : <Copy className={iconCls} aria-hidden />, copied ? "Copied" : "Copy")
-            : copied
-              ? <Check className={iconCls} />
-              : <Copy className={iconCls} />}
-        </Button>,
         ...(supportsZip(job.format) && !job.restored
           ? [
-              <Button key="zip" variant="ghost" className={cls} aria-label="Download .zip with images" title="Download .zip" onClick={stop(onDownloadZip)}>
+              <Button key="zip" variant="ghost" className={cls} aria-label="Download .zip with images" title="Download .zip with images" onClick={stop(onDownloadZip)}>
                 {labeled ? withLabel(<Archive className={iconCls} aria-hidden />, "Download .zip") : <Archive className={iconCls} />}
               </Button>,
             ]
           : []),
-        <Button key="chunk" variant="ghost" className={cls} aria-label="Chunk for RAG" title="Chunk for RAG" aria-expanded={chunkOpen} onClick={stop(chunkOpen ? () => setChunkOpen(false) : openChunks)}>
-          {labeled ? withLabel(<Scissors className={iconCls} aria-hidden />, "Chunk for RAG") : <Scissors className={iconCls} />}
-        </Button>,
         <Button key="remove" variant="ghost" className={cls} aria-label="Remove from queue" title="Remove" onClick={stop(onRemove)}>
           {labeled ? withLabel(<Trash2 className={iconCls} aria-hidden />, "Remove") : <Trash2 className={iconCls} />}
         </Button>,
       ];
     }
-    if (job.status === "failed") {
+    if (job.status === "failed" || job.status === "cancelled") {
       return [
         <Button key="retry" variant="ghost" className={cls} aria-label="Retry" title="Retry" onClick={stop(onRetry)}>
           {labeled ? withLabel(<RotateCcw className={iconCls} aria-hidden />, "Retry") : <RotateCcw className={iconCls} />}
@@ -380,6 +316,9 @@ function QueueRow({
       </Button>,
     ];
   };
+
+  const actions = buildActions(false);
+  const labeledActions = buildActions(true);
 
   return (
     <motion.li
@@ -401,7 +340,7 @@ function QueueRow({
         <button
           role="checkbox"
           aria-checked={checked}
-          aria-label={`Select ${job.file.name} for batch actions`}
+          aria-label={`Toggle batch-select ${job.file.name}`}
           onClick={(e) => {
             e.stopPropagation();
             onToggleCheck(e.shiftKey);
@@ -415,51 +354,62 @@ function QueueRow({
         >
           <Check className="size-4" />
         </button>
-        <span
-          className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background"
-          style={{ color: family ? `var(--${FAMILY_TOKEN[family]})` : "var(--muted-foreground)" }}
-          aria-hidden
+        {/* The select target is a real button — keyboard users can Tab to it. */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+          aria-label={`Preview ${job.file.name}`}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:rounded-md focus-visible:border-ring"
         >
-          {job.kind ? (
-            <FileText className="size-4" />
-          ) : family ? (
-            <FamilyGlyph family={family} />
-          ) : (
-            <FileQuestion className="size-4" />
-          )}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-medium text-foreground">{job.file.name}</p>
+          <span
+            className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background"
+            style={{ color: family ? `var(--${FAMILY_TOKEN[family]})` : "var(--muted-foreground)" }}
+            aria-hidden
+          >
             {job.kind ? (
-              <span className="shrink-0 rounded-full border border-border/70 bg-background px-1.5 py-px font-mono text-[10px] uppercase tracking-wide text-steel">
-                {job.kind}
-              </span>
-            ) : job.format && family ? (
-              <span
-                className="shrink-0 rounded-full border border-border/70 bg-background px-1.5 py-px font-mono text-[10px] uppercase tracking-wide"
-                style={{ color: `var(--${FAMILY_TOKEN[family]})` }}
-              >
-                {job.format}
-              </span>
-            ) : null}
-          </div>
-          <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
-            {formatSize(job.file.size)}
-            {job.status === "done"
-              ? job.kind
-                ? " · already markdown"
-                : ` · ${job.ms} ms`
-              : ""}
-            {active && job.status === "smelting" ? ` · ${elapsed}s` : ""}
-          </p>
-        </div>
+              <FileText className="size-4" />
+            ) : family ? (
+              <FamilyGlyph family={family} />
+            ) : (
+              <FileQuestion className="size-4" />
+            )}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2">
+              <span className="truncate text-sm font-medium text-foreground">{job.file.name}</span>
+              {job.kind ? (
+                <span className="shrink-0 rounded-full border border-border/70 bg-background px-1.5 py-px font-mono text-[11px] uppercase tracking-wide text-steel">
+                  {job.kind}
+                </span>
+              ) : job.format && family ? (
+                <span
+                  className="shrink-0 rounded-full border border-border/70 bg-background px-1.5 py-px font-mono text-[11px] uppercase tracking-wide"
+                  style={{ color: `var(--${FAMILY_TOKEN[family]})` }}
+                >
+                  {job.format}
+                </span>
+              ) : null}
+            </span>
+            <span className="mt-0.5 block truncate font-mono text-[11px] text-muted-foreground">
+              {formatSize(job.file.size)}
+              {job.status === "done"
+                ? job.kind
+                  ? " · already markdown"
+                  : ` · ${job.ms} ms`
+                : ""}
+              {active ? ` · ${elapsed}s` : ""}
+            </span>
+          </span>
+        </button>
         <div className="hidden items-center gap-0.5 sm:flex" onClick={(e) => e.stopPropagation()}>
-          {buildActions(false)}
+          {actions}
         </div>
         <div className="flex items-center gap-1 sm:hidden" onClick={(e) => e.stopPropagation()}>
-          {buildActions(false)[0]}
-          {buildActions(false).length > 1 && (
+          {actions[0]}
+          {actions.length > 1 && (
             <Button
               variant="ghost"
               size="icon-lg"
@@ -480,7 +430,8 @@ function QueueRow({
           className="mt-2 flex flex-wrap items-center gap-1 border-t border-border/60 pt-2 sm:hidden"
           onClick={(e) => e.stopPropagation()}
         >
-          {buildActions(true)}
+          {/* slice(1) — the always-visible primary is already inline. */}
+          {labeledActions.slice(1)}
         </div>
       )}
 
@@ -489,153 +440,6 @@ function QueueRow({
           <p className="text-xs font-medium text-destructive">{error.title}</p>
           <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{error.hint}</p>
         </div>
-      )}
-      {chunkPanelVisible(chunkOpen, chunks !== null, chunkLoading, chunkError !== null) && (
-        <motion.div
-          initial={{ opacity: 0, y: -4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, ease: "easeOut" }}
-          onClick={(e) => e.stopPropagation()}
-          className="mt-3 rounded-lg border border-border bg-background p-3"
-        >
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-              Chunk for RAG
-            </p>
-            <div
-              className="flex rounded-lg border border-border bg-background p-0.5"
-              role="group"
-              aria-label="Chunk size in tokens"
-            >
-              {([256, 512, 1024] as const).map((size) => (
-                <button
-                  key={size}
-                  onClick={() => changeChunkSize(size)}
-                  aria-pressed={chunkSize === size && customTokens === ""}
-                  className={cn(
-                    "min-h-10 rounded-md px-3 font-mono text-[11px] uppercase tracking-wide transition-colors duration-150",
-                    chunkSize === size && customTokens === ""
-                      ? "bg-secondary text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {size}
-                </button>
-              ))}
-              <input
-                type="number"
-                min={32}
-                max={4096}
-                value={customTokens}
-                onChange={(e) => {
-                  setCustomTokens(e.target.value);
-                  void computeChunks();
-                }}
-                placeholder="custom"
-                aria-label="Custom chunk size in tokens"
-                className="min-h-10 w-24 rounded-md bg-transparent px-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:outline-none"
-              />
-            </div>
-            {chunkLoading ? (
-              <span className="font-mono text-[11px] text-muted-foreground">
-                loading tokenizer…
-              </span>
-            ) : chunkError ? (
-              <span className="font-mono text-[11px] text-destructive">{chunkError}</span>
-            ) : (
-              <span className="font-mono text-[11px] text-steel">
-                {chunks?.length ?? 0} chunk{chunks?.length === 1 ? "" : "s"} · ~
-                {Math.round(
-                  (chunks ?? []).reduce((s, c) => s + c.tokens, 0) / Math.max(1, chunks?.length ?? 1),
-                )}{" "}
-                {tokenLabel} avg
-                {(chunks ?? []).filter((c) => c.meta.isTable).length > 0 && (
-                  <>
-                    {" "}
-                    · {(chunks ?? []).filter((c) => c.meta.isTable).length} table
-                    {(chunks ?? []).filter((c) => c.meta.isTable).length === 1 ? "" : "s"} kept
-                    whole
-                  </>
-                )}
-              </span>
-            )}
-            <div className="ml-auto flex items-center gap-1">
-              <Button size="sm" className="min-h-10" onClick={() => void downloadChunks()}>
-                <Archive className="size-3.5" aria-hidden />
-                Download .zip
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="min-h-10"
-                onClick={() => setChunkOpen(false)}
-              >
-                <X className="size-3.5" aria-hidden />
-                Close
-              </Button>
-            </div>
-          </div>
-          <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/60 pt-2.5">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-[11px] text-muted-foreground">overlap</span>
-              <div
-                className="flex rounded-lg border border-border bg-background p-0.5"
-                role="group"
-                aria-label="Overlap mode"
-              >
-                <button
-                  onClick={() => {
-                    setOverlapAuto(true);
-                    void computeChunks();
-                  }}
-                  aria-pressed={overlapAuto}
-                  className={cn(
-                    "min-h-9 rounded-md px-2.5 font-mono text-[10px] uppercase tracking-wide transition-colors duration-150",
-                    overlapAuto
-                      ? "bg-secondary text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  auto ~10%
-                </button>
-                <button
-                  onClick={() => {
-                    setOverlapAuto(false);
-                    void computeChunks();
-                  }}
-                  aria-pressed={!overlapAuto}
-                  className={cn(
-                    "min-h-9 rounded-md px-2.5 font-mono text-[10px] uppercase tracking-wide transition-colors duration-150",
-                    !overlapAuto
-                      ? "bg-secondary text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  manual
-                </button>
-              </div>
-              {!overlapAuto && (
-                <input
-                  type="number"
-                  min={0}
-                  max={1024}
-                  value={overlapTokens}
-                  onChange={(e) => {
-                    setOverlapTokens(e.target.value);
-                    void computeChunks();
-                  }}
-                  placeholder="tokens"
-                  aria-label="Overlap in tokens"
-                  className="min-h-9 w-20 rounded-md border border-border bg-background px-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
-                />
-              )}
-            </div>
-            <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">
-              Counted with {tokenLabel} · 10–20% overlap is the common range — one published
-              benchmark found zero benefit, so treat it as cheap insurance, not a guarantee.
-            </p>
-          </div>
-        </motion.div>
       )}
       {active && (
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-muted/60">

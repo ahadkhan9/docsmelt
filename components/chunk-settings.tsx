@@ -1,25 +1,33 @@
 "use client";
 
+import { Archive } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { ChunkSettings } from "@/lib/converter/useConverter";
 import { cn } from "@/lib/utils";
 
 /**
  * The chunk-settings strip — the Flow B controls (presets + custom +
  * overlap). Every change re-chunks the selected job instantly (cheap,
- * in-memory). Copy states the honest overlap guidance.
+ * in-memory). This is the SINGLE chunking surface: the per-row panel is
+ * gone, and "Chunks .zip" is the one chunk-export path (uses the global
+ * settings above). Copy states the honest overlap guidance.
  */
 export function ChunkSettingsStrip({
   settings,
   onChange,
+  hasChunks = false,
+  onDownloadChunksZip,
 }: {
   settings: ChunkSettings;
   onChange: (next: ChunkSettings) => void;
+  hasChunks?: boolean;
+  onDownloadChunksZip?: () => void;
 }) {
   const presets: ChunkSettings["preset"][] = [256, 512, 1024];
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/60 bg-card/40 px-4 py-2.5">
-      <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+      <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
         Chunk settings
       </span>
       <div
@@ -50,7 +58,7 @@ export function ChunkSettingsStrip({
           onChange={(e) => onChange({ ...settings, customTokens: e.target.value })}
           placeholder="custom"
           aria-label="Custom chunk size in tokens"
-          className="min-h-10 w-24 rounded-md bg-transparent px-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+          className="min-h-10 w-24 rounded-md bg-transparent px-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
         />
       </div>
       <div className="flex items-center gap-2">
@@ -64,7 +72,7 @@ export function ChunkSettingsStrip({
             onClick={() => onChange({ ...settings, overlapAuto: true })}
             aria-pressed={settings.overlapAuto}
             className={cn(
-              "min-h-9 rounded-md px-2.5 font-mono text-[10px] uppercase tracking-wide transition-colors duration-150",
+              "min-h-10 rounded-md px-2.5 font-mono text-[11px] uppercase tracking-wide transition-colors duration-150",
               settings.overlapAuto
                 ? "bg-secondary text-foreground"
                 : "text-muted-foreground hover:text-foreground",
@@ -76,7 +84,7 @@ export function ChunkSettingsStrip({
             onClick={() => onChange({ ...settings, overlapAuto: false })}
             aria-pressed={!settings.overlapAuto}
             className={cn(
-              "min-h-9 rounded-md px-2.5 font-mono text-[10px] uppercase tracking-wide transition-colors duration-150",
+              "min-h-10 rounded-md px-2.5 font-mono text-[11px] uppercase tracking-wide transition-colors duration-150",
               !settings.overlapAuto
                 ? "bg-secondary text-foreground"
                 : "text-muted-foreground hover:text-foreground",
@@ -94,11 +102,23 @@ export function ChunkSettingsStrip({
             onChange={(e) => onChange({ ...settings, overlapTokens: e.target.value })}
             placeholder="tokens"
             aria-label="Overlap in tokens"
-            className="min-h-9 w-20 rounded-md border border-border bg-background px-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
+            className="min-h-10 w-20 rounded-md border border-border bg-background px-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none"
           />
         )}
       </div>
-      <p className="w-full font-mono text-[10px] leading-relaxed text-muted-foreground">
+      {hasChunks && onDownloadChunksZip && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto min-h-10"
+          onClick={onDownloadChunksZip}
+          title="Download all chunks as numbered .md files in one .zip"
+        >
+          <Archive className="size-3.5" aria-hidden />
+          Chunks .zip
+        </Button>
+      )}
+      <p className="w-full font-mono text-[11px] leading-relaxed text-muted-foreground">
         Counted with cl100k tokens · 10–20% overlap is the common range — one published benchmark
         found zero benefit, so treat it as cheap insurance, not a guarantee.
       </p>

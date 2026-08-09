@@ -12,11 +12,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AnyFormat, Asset, Document } from "./protocol";
 import { ConverterPool } from "./pool";
 import { decodeText, detectPassThrough, type PassThroughKind } from "./passthrough";
-import { buildExportZip, zipDocument } from "./zip";
+import { buildExportZip, stemOf, zipDocument } from "./zip";
 import { supportsZip } from "./formats";
 import { rangeSelect, toggleChecked } from "./selection";
-import { chunkMarkdownAsync, resolveChunkOptions, type RagChunk } from "./chunk";
-import { clearHistory, loadAll, recordFromJob, recordToJobView, saveRecord } from "./history";
+import { chunkMarkdownAsync, chunkZip, resolveChunkOptions, type RagChunk } from "./chunk";
+import { clearHistory, deleteRecords, loadAll, recordFromJob, recordToJobView, saveRecord } from "./history";
 import { downloadBlob } from "@/lib/utils";
 
 let pool: ConverterPool | null = null;
@@ -80,6 +80,8 @@ export function useConverter() {
   });
   const checkAnchor = useRef<string | null>(null);
   const chunkSettingsRef = useRef<ChunkSettings>(chunkSettings);
+  /** Abort flag for a running batch export (the Exporting button cancels). */
+  const exportAbortRef = useRef(false);
   const selectedIdRef = useRef<string | null>(null);
   selectedIdRef.current = selectedId;
 
@@ -138,6 +140,9 @@ export function useConverter() {
    *  Chunking is auxiliary — failures never fail the conversion. */
   const attachChunks = useCallback(async (view: JobView) => {
     if (!view.markdown) return;
+    // Huge outputs render raw-only and hide the chunking switch — computing
+    // chunks for them would be wasted work that's never shown.
+    if (view.markdown.length > 1_000_000) return;
     const settings = chunkSettingsRef.current;
     if (!settings?.enabled) return;
     const options = resolveChunkOptions({
@@ -162,6 +167,22 @@ export function useConverter() {
       // Re-chunk the selected done job from its in-memory markdown (cheap).
       const selected = jobsRef.current.find((j) => j.id === selectedIdRef.current);
       if (selected?.markdown) void attachChunks(selected);
+    },
+    [attachChunks],
+  );
+
+  /** Select a job — and keep the global "Chunking on" switch honest: the
+   *  selected job is chunked on the spot if it isn't already, so the Flow B
+   *  preview never shows an on-switch with no chunks (F1). Accepts null to
+   *  clear the selection (Esc). */
+  const selectJob = useCallback(
+    (id: string | null) => {
+      setSelectedId(id);
+      if (!id) return;
+      const settings = chunkSettingsRef.current;
+      if (!settings?.enabled) return;
+      const job = jobsRef.current.find((j) => j.id === id);
+      if (job?.markdown && !job.chunks) void attachChunks(job);
     },
     [attachChunks],
   );
@@ -312,6 +333,8 @@ export function useConverter() {
       setSelectedId((s) => (s && doomed.has(s) ? null : s));
     }
     setChecked([]);
+    // Remove from history too — a removed job must not resurrect on reload.
+    void deleteRecords([...doomed]).catch(() => {});
   }, [checked]);
 
   const copyChecked = useCallback(async (): Promise<number> => {
@@ -342,6 +365,8 @@ export function useConverter() {
     keysRef.current.delete(id);
     setJobs((list) => list.filter((j) => j.id !== id));
     setSelectedId((s) => (s === id ? null : s));
+    // Remove from history too — a removed job must not resurrect on reload.
+    void deleteRecords([id]).catch(() => {});
   }, []);
 
   const retry = useCallback((id: string) => {
@@ -354,14 +379,18 @@ export function useConverter() {
   }, [run, setJob]);
 
   const clearFinished = useCallback(() => {
+    const finished: string[] = [];
     for (const j of jobsRef.current) {
       if (j.status === "done" || j.status === "failed" || j.status === "cancelled") {
         keysRef.current.delete(j.id);
+        finished.push(j.id);
       }
     }
     setJobs((list) => list.filter((j) => !(j.status === "done" || j.status === "failed" || j.status === "cancelled")));
     setSelectedId(null);
     setChecked([]); // stale ids would otherwise linger in the batch bar
+    // Remove from history too — "Clear finished" must actually stick.
+    void deleteRecords(finished).catch(() => {});
   }, []);
 
   const downloadMarkdown = useCallback((id: string) => {
@@ -410,63 +439,92 @@ export function useConverter() {
 
   /**
    * Export a list of done jobs as one .zip. Assets come from a lazy
-   * toDocument pass, run sequentially (memory-safe). Jobs flip to
-   * 'packing' while their assets are gathered; markdown stays visible.
+   * toDocument pass, run sequentially (memory-safe). Row statuses stay
+   * 'done' throughout — the "Exporting…" button is the single progress +
+   * cancel surface (clicking it aborts; nothing partial is downloaded).
    */
   const exportJobs = useCallback(
     async (list: JobView[]): Promise<boolean> => {
       if (list.length === 0 || exporting) return false;
       if (jobsRef.current.some((j) => j.status === "packing")) return false;
       setExporting(true);
-      for (const job of list) setJob(job.id, { status: "packing" });
+      exportAbortRef.current = false;
       try {
         const entries: { name: string; markdown: string; assets?: Asset[] }[] = [];
         for (const job of list) {
-        const entry: { name: string; markdown: string; assets?: Asset[] } = {
-          name: job.file.name,
-          markdown: job.markdown ?? "",
-        };
-        // Asset-capable formats need a fresh toDocument run (the original
-        // .md path never stored the document model). Pass-through files
-        // have no assets by definition.
-        if (!job.kind && job.format && supportsZip(job.format)) {
-          try {
-            const bytes = new Uint8Array(await job.file.arrayBuffer());
-            const key = keysRef.current.get(job.id);
-            if (key?.cancelled) continue;
-            const conv = getPool().enqueue("convert", job.file.name, bytes, {
-              format: job.format,
-              wantDocument: true,
-            });
-            key && (key.poolJob = conv.id);
-            const res = await conv.promise;
-            if (res.ok) entry.assets = (res.result as Document).assets;
-          } catch {
-            // Asset pass failed — export the markdown alone, honestly.
+          if (exportAbortRef.current) break;
+          const key = keysRef.current.get(job.id);
+          if (key?.cancelled) continue;
+          const entry: { name: string; markdown: string; assets?: Asset[] } = {
+            name: job.file.name,
+            markdown: job.markdown ?? "",
+          };
+          // Asset-capable formats need a fresh toDocument run (the original
+          // .md path never stored the document model). Pass-through files
+          // have no assets by definition.
+          if (!job.kind && job.format && supportsZip(job.format)) {
+            try {
+              const bytes = new Uint8Array(await job.file.arrayBuffer());
+              if (exportAbortRef.current || key?.cancelled) continue;
+              const conv = getPool().enqueue("convert", job.file.name, bytes, {
+                format: job.format,
+                wantDocument: true,
+              });
+              key && (key.poolJob = conv.id);
+              const res = await conv.promise;
+              if (res.ok) entry.assets = (res.result as Document).assets;
+            } catch {
+              // Asset pass failed — export the markdown alone, honestly.
+            }
           }
-        }
           entries.push(entry);
         }
+        if (exportAbortRef.current || entries.length === 0) return false;
         const blob = await buildExportZip(entries);
         download(blob, `docsmelt-export-${entries.length}-files.zip`);
         return true;
       } finally {
-        for (const job of list) setJob(job.id, { status: "done" });
         setExporting(false);
       }
     },
-    [exporting, setJob],
+    [exporting],
   );
 
+  /** Abort the running batch export (no partial zip is downloaded). */
+  const cancelExport = useCallback(() => {
+    exportAbortRef.current = true;
+  }, []);
+
   const exportAll = useCallback(
-    () => exportJobs(jobsRef.current.filter((j) => j.status === "done")),
+    () => exportJobs(jobsRef.current.filter((j) => j.status === "done" && !j.restored)),
     [exportJobs],
   );
 
   const exportChecked = useCallback(() => {
     const ids = new Set(checked);
-    return exportJobs(jobsRef.current.filter((j) => j.status === "done" && ids.has(j.id)));
+    return exportJobs(
+      jobsRef.current.filter((j) => j.status === "done" && !j.restored && ids.has(j.id)),
+    );
   }, [checked, exportJobs]);
+
+  /** Download the selected job's computed chunks as a numbered .zip — the
+   *  single chunk-export path, using the GLOBAL chunk settings (R1). */
+  const downloadChunksZip = useCallback((id: string) => {
+    const view = jobsRef.current.find((j) => j.id === id);
+    if (!view?.chunks?.length) return;
+    const settings = chunkSettingsRef.current;
+    const options = resolveChunkOptions({
+      preset: settings.preset,
+      customTokens: Number(settings.customTokens) || undefined,
+      overlapAuto: settings.overlapAuto,
+      overlapTokens: Number(settings.overlapTokens) || undefined,
+    });
+    const label =
+      view.chunkEncoding === "chars/4 estimate" ? "tokens (estimate)" : "cl100k_base tokens";
+    void chunkZip(stemOf(view.file.name), view.chunks, view.file.name, label, options).then(
+      (blob) => download(blob, `${stemOf(view.file.name)}-chunks.zip`),
+    );
+  }, []);
 
   // One shared clock while anything is active — rows derive elapsed time.
   useEffect(() => {
@@ -492,7 +550,8 @@ export function useConverter() {
     exportAll, exportChecked, deleteChecked, copyChecked,
     toggleCheck, clearChecked,
     restoreHistory, dismissHistory, clearHistoryStore,
-    downloadMarkdown, downloadZip, select: setSelectedId,
+    downloadMarkdown, downloadZip, downloadChunksZip,
+    cancelExport, select: selectJob,
     activeCount,
   };
 }

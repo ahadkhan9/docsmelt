@@ -82,6 +82,23 @@ export async function clearHistory(): Promise<void> {
   await withStore("readwrite", (store) => store.clear());
 }
 
+/** Remove specific records by id — lets Remove/Delete/Clear-finished act on
+ *  the queue AND the store, so a reload never resurrects "removed" jobs. */
+export async function deleteRecords(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const db = await open();
+  try {
+    const tx = db.transaction(STORE, "readwrite");
+    for (const id of ids) tx.objectStore(STORE).delete(id);
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
 /** Restored jobs are done with markdown; the original file is gone. */
 export function recordToJobView(record: HistoryRecord): JobView {
   return {

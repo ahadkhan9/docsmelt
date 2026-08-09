@@ -1,14 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Copy, Download } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { MobilePreview } from "./mobile-preview";
-import { PreviewSelectorBar } from "./preview-selector-bar";
 import { ChunkBlock, SectionBlock } from "./preview-blocks";
 import { MarkdownView } from "./markdown";
 import { chunkSummary, type RagChunk } from "@/lib/converter/chunk";
-import { buildSelectorModel } from "@/lib/converter/selector";
 import { parseSections, sectionForHeading } from "@/lib/converter/sections";
 import { cn } from "@/lib/utils";
 
@@ -37,7 +33,6 @@ export function DocumentPreview({
 }) {
   const outline = useMemo(() => parseSections(markdown), [markdown]);
   const summary = useMemo(() => (chunks ? chunkSummary(chunks) : null), [chunks]);
-  const selector = useMemo(() => buildSelectorModel(outline, chunks, tokenLabel), [outline, chunks, tokenLabel]);
   const paneRef = useRef<HTMLDivElement>(null);
   const railRef = useRef<HTMLUListElement>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -139,14 +134,6 @@ export function DocumentPreview({
     );
   }
 
-  const spyValue = chunkMode
-    ? activeChunk
-      ? `chunk:${activeChunk}`
-      : null
-    : activeId
-      ? `section:${activeId}`
-      : null;
-
   const outlineItems = outline.sections;
   const activeOutlineId =
     chunkMode && activeChunk && chunks
@@ -158,8 +145,8 @@ export function DocumentPreview({
     <div className="flex h-full min-h-0 flex-col">
       <div className="relative flex min-h-0 flex-1">
         {/* left rail — outline (Flow A) or chunks (Flow B) */}
-        <aside className="hidden w-52 shrink-0 overflow-y-auto border-r border-paper-line bg-[#f1f3f4] p-3 scroll-thin md:block">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-paper-muted">
+        <aside className="hidden w-52 shrink-0 overflow-y-auto border-r border-paper-line bg-paper-chip p-3 scroll-thin md:block">
+          <p className="font-mono text-[11px] uppercase tracking-wider text-paper-muted">
             {chunkMode ? "Chunks" : "Outline"}
           </p>
           {chunkMode && chunks ? (
@@ -172,7 +159,7 @@ export function DocumentPreview({
                     className={cn(
                       "flex min-h-10 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors duration-150",
                       activeChunk === chunk.index
-                        ? "bg-[#e4e8ea] font-medium text-paper-foreground"
+                        ? "bg-paper-active font-medium text-paper-foreground"
                         : "text-paper-muted hover:text-paper-foreground",
                     )}
                   >
@@ -195,7 +182,7 @@ export function DocumentPreview({
                       "min-h-10 w-full truncate rounded-md px-2 py-1.5 text-left transition-colors duration-150",
                       section.level === 0 && "font-mono text-[11px]",
                       activeOutlineId === section.id
-                        ? "bg-[#e4e8ea] font-medium text-paper-foreground"
+                        ? "bg-paper-active font-medium text-paper-foreground"
                         : "text-paper-muted hover:text-paper-foreground",
                     )}
                     style={{
@@ -211,14 +198,6 @@ export function DocumentPreview({
         </aside>
 
         <div className="flex min-h-0 flex-1 flex-col">
-        {/* the Selector Bar — precise jumps + the always-visible active label;
-            the rail above stays (mouse + hover + keyboard) */}
-        <PreviewSelectorBar
-          model={selector}
-          value={spyValue ?? ""}
-          kind={chunkMode ? "chunk" : "section"}
-          onJump={jumpTo}
-        />
         {/* content scroller */}
         <div
           ref={paneRef}

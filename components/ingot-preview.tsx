@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { ChunkSettingsStrip } from "./chunk-settings";
 import { MarkdownView } from "./markdown";
 import { DocumentPreview } from "./document-preview";
+import { announce } from "@/lib/announce";
 import { refine, type ErrorKind } from "@/lib/converter/errors";
 import { FAMILY_OF, FAMILY_TOKEN, FamilyGlyph, supportsZip } from "@/lib/converter/formats";
 import type { ChunkSettings, JobView } from "@/lib/converter/useConverter";
@@ -32,6 +33,7 @@ export function IngotPreview({
   onChunkSettings,
   onDownloadMd,
   onDownloadZip,
+  onDownloadChunksZip,
   onRetry,
   onRemove,
 }: {
@@ -40,6 +42,7 @@ export function IngotPreview({
   onChunkSettings: (next: ChunkSettings) => void;
   onDownloadMd: (id: string) => void;
   onDownloadZip: (id: string) => void;
+  onDownloadChunksZip: (id: string) => void;
   onRetry: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
@@ -52,20 +55,30 @@ export function IngotPreview({
     try {
       await navigator.clipboard.writeText(job.markdown);
       setCopied(true);
+      announce("Copied markdown");
       setTimeout(() => setCopied(false), 1500);
     } catch {
       // clipboard unavailable — the .md download remains the fallback
     }
   };
 
+  // ArrowLeft/ArrowRight roving selection for the rendered/raw tabs.
+  const onTabsKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const next = tab === "rendered" ? "raw" : "rendered";
+    setTab(next);
+    document.getElementById(next === "raw" ? "preview-tab-raw" : "preview-tab-rendered")?.focus();
+  };
+
   if (!job) {
     return (
       <div className="flex min-h-[480px] flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card px-6 text-center lg:h-[600px]">
         <p className="font-display text-2xl font-semibold text-muted-foreground">
-          Select a converted file.
+          Your markdown lands here.
         </p>
         <p className="max-w-sm font-mono text-xs leading-relaxed text-muted-foreground">
-          Its markdown lands here — rendered or raw.
+          Select a converted file to preview — rendered or raw.
         </p>
       </div>
     );
@@ -106,7 +119,7 @@ export function IngotPreview({
             {job.markdown
               ? job.kind
                 ? `already markdown · ${(job.chars ?? 0).toLocaleString()} chars`
-                : `${(job.chars ?? 0).toLocaleString()} chars${job.ms ? ` · ${job.ms} ms` : ""}`
+                : `${(job.chars ?? 0).toLocaleString()} chars`
               : active
                 ? job.status === "smelting"
                   ? "smelting…"
@@ -122,12 +135,16 @@ export function IngotPreview({
                 className="flex rounded-lg border border-border bg-background p-0.5"
                 role="tablist"
                 aria-label="Preview mode"
+                onKeyDown={onTabsKeyDown}
               >
                 {(["rendered", "raw"] as const).map((t) => (
                   <button
                     key={t}
+                    id={t === "rendered" ? "preview-tab-rendered" : "preview-tab-raw"}
                     role="tab"
                     aria-selected={tab === t}
+                    aria-controls="preview-panel"
+                    tabIndex={tab === t ? 0 : -1}
                     onClick={() => setTab(t)}
                     className={cn(
                       "min-h-10 rounded-md px-3 font-mono text-[11px] uppercase tracking-wide transition-colors duration-150",
@@ -143,6 +160,7 @@ export function IngotPreview({
               <button
                 role="switch"
                 aria-checked={chunkSettings.enabled}
+                aria-label="Toggle chunking — split the preview into token-bounded chunks"
                 onClick={() => onChunkSettings({ ...chunkSettings, enabled: !chunkSettings.enabled })}
                 className={cn(
                   "min-h-10 rounded-lg border px-3 font-mono text-[11px] uppercase tracking-wide transition-colors duration-150",
@@ -168,14 +186,14 @@ export function IngotPreview({
               </Button>
             )}
             <Button
-              variant="ghost"
-              size="icon-lg"
-              className="min-h-11 min-w-11"
+              variant="secondary"
+              className="min-h-10"
               aria-label="Copy markdown"
               title="Copy markdown"
               onClick={copy}
             >
               {copied ? <Check className="size-4 text-fam-sheet" /> : <Copy className="size-4" />}
+              {copied ? "Copied" : "Copy"}
             </Button>
             <Button
               variant="ghost"
@@ -204,12 +222,20 @@ export function IngotPreview({
       </div>
 
       {chunkSettings.enabled && settingsOpen && (
-        <ChunkSettingsStrip settings={chunkSettings} onChange={onChunkSettings} />
+        <ChunkSettingsStrip
+          settings={chunkSettings}
+          onChange={onChunkSettings}
+          hasChunks={(job.chunks?.length ?? 0) > 0}
+          onDownloadChunksZip={() => onDownloadChunksZip(job.id)}
+        />
       )}
 
       {job.markdown ? (
         <motion.div
           key={job.id}
+          role="tabpanel"
+          id="preview-panel"
+          aria-labelledby={tab === "rendered" ? "preview-tab-rendered" : "preview-tab-raw"}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
@@ -218,7 +244,7 @@ export function IngotPreview({
           {huge ? (
             <div className="h-full overflow-y-auto scroll-thin bg-paper text-paper-foreground">
               <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
-                <p className="mb-4 rounded-lg border border-dashed border-paper-line bg-[#f1f3f4] px-3 py-2 font-mono text-xs text-paper-muted">
+                <p className="mb-4 rounded-lg border border-dashed border-paper-line bg-paper-chip px-3 py-2 font-mono text-xs text-paper-muted">
                   Large output — shown as raw text. Download the .md for the full file.
                 </p>
                 <pre className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed">
@@ -261,11 +287,11 @@ export function IngotPreview({
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => onRetry(job.id)}>
+            <Button variant="secondary" className="min-h-11" onClick={() => onRetry(job.id)}>
               <RotateCcw className="size-4" aria-hidden />
               Retry
             </Button>
-            <Button variant="ghost" onClick={() => onRemove(job.id)}>
+            <Button variant="ghost" className="min-h-11" onClick={() => onRemove(job.id)}>
               <Trash2 className="size-4" aria-hidden />
               Remove
             </Button>
@@ -273,7 +299,7 @@ export function IngotPreview({
         </div>
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
-          <div className="h-1 w-40 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuetext={`${job.status} — working`}>
+          <div className="h-1 w-40 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Converting" aria-valuetext={`${job.status} — working`}>
             <div className="h-full w-1/3 rounded-full bg-molten animate-shimmer" />
           </div>
           <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">

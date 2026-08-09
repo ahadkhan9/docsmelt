@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { MotionConfig } from "motion/react";
-import { Lock } from "lucide-react";
+import Link from "next/link";
+import { motion, MotionConfig } from "motion/react";
+import { Lock, X } from "lucide-react";
+import { ANNOUNCE_EVENT } from "@/lib/announce";
 import { refine, type ErrorKind } from "@/lib/converter/errors";
 import { Button } from "@/components/ui/button";
 import { handleShortcut } from "@/lib/converter/shortcuts";
@@ -63,6 +65,56 @@ export default function ConverterApp() {
   useEffect(() => {
     if (c.notice) setAnnouncement(c.notice);
   }, [c.notice]);
+
+  // Visible toast for the same notices (folder counts, history trim) — the
+  // live region alone was screen-reader-only feedback (G1).
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (!c.notice) return;
+    setToast(c.notice);
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 4000);
+  }, [c.notice]);
+
+  // One-time, dismissible "you're done" hint after the first conversion.
+  const [showDoneHint, setShowDoneHint] = useState(false);
+  useEffect(() => {
+    if (showDoneHint || c.jobs.length === 0) return;
+    if (!c.jobs.some((j) => j.status === "done")) return;
+    try {
+      if (sessionStorage.getItem("dm-done-hint")) return;
+      sessionStorage.setItem("dm-done-hint", "1");
+    } catch {
+      // privacy mode — the hint just shows once per mount
+    }
+    setShowDoneHint(true);
+  }, [c.jobs, showDoneHint]);
+
+  // Screen-reader announcements for copy/export actions from any surface.
+  useEffect(() => {
+    const onAnnounce = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      if (detail) setAnnouncement(detail);
+    };
+    window.addEventListener(ANNOUNCE_EVENT, onAnnounce);
+    return () => window.removeEventListener(ANNOUNCE_EVENT, onAnnounce);
+  }, []);
+
+  // "Clear history" is permanent — two-step inline confirmation (R5).
+  const [clearArmed, setClearArmed] = useState(false);
+  const clearArmTimer = useRef<number | null>(null);
+  const armClearHistory = () => {
+    if (clearArmed) {
+      if (clearArmTimer.current) window.clearTimeout(clearArmTimer.current);
+      setClearArmed(false);
+      void c.clearHistoryStore();
+    } else {
+      setClearArmed(true);
+      if (clearArmTimer.current) window.clearTimeout(clearArmTimer.current);
+      clearArmTimer.current = window.setTimeout(() => setClearArmed(false), 3000);
+    }
+  };
 
   // PWA: register the offline shell (production only; dev never caches).
   useEffect(() => {
@@ -174,6 +226,21 @@ export default function ConverterApp() {
           {hasJobs ? (
             <div className="flex flex-col gap-5">
               <FurnaceDropzone compact engine={c.engine} onFiles={c.addFiles} pickerRef={pickerRef} />
+              {showDoneHint && (
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-molten/40 bg-card px-4 py-2.5">
+                  <p className="font-mono text-[11px] text-steel">
+                    Done — copy the markdown or download the .md from the panel.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowDoneHint(false)}
+                    aria-label="Dismiss hint"
+                    className="flex min-h-10 min-w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-150 hover:text-foreground"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+              )}
               <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
                 <FileQueue
                   jobs={c.jobs}
@@ -193,8 +260,8 @@ export default function ConverterApp() {
                   onExportChecked={() => void c.exportChecked()}
                   onCopyChecked={c.copyChecked}
                   onClearChecked={c.clearChecked}
+                  onCancelExport={c.cancelExport}
                   exporting={c.exporting}
-                  globalPreset={c.chunkSettings.enabled ? c.chunkSettings.preset : undefined}
                 />
                 <IngotPreview
                   job={c.selected}
@@ -202,6 +269,7 @@ export default function ConverterApp() {
                   onChunkSettings={c.setChunkSettings}
                   onDownloadMd={c.downloadMarkdown}
                   onDownloadZip={c.downloadZip}
+                  onDownloadChunksZip={c.downloadChunksZip}
                   onRetry={c.retry}
                   onRemove={c.remove}
                 />
@@ -245,20 +313,39 @@ export default function ConverterApp() {
             <div className="font-mono text-[11px] leading-relaxed text-muted-foreground md:shrink-0 md:text-right">
               <p>Engine: Firecrawl AnyDoc (MIT) · WebAssembly</p>
               <p>No server · no uploads · no accounts</p>
+              <p className="mt-1.5">
+                <Link
+                  href="/benchmark"
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  Benchmarks
+                </Link>
+              </p>
               {c.historyCount !== null && (
                 <p className="mt-1">
                   <button
                     type="button"
                     className="underline underline-offset-2 hover:text-foreground"
-                    onClick={() => void c.clearHistoryStore()}
+                    onClick={armClearHistory}
                   >
-                    Clear history
+                    {clearArmed ? "Clear history? This can't be undone." : "Clear history"}
                   </button>
                 </p>
               )}
             </div>
           </div>
         </footer>
+
+        {toast && (
+          <motion.div
+            role="status"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="fixed bottom-6 left-1/2 z-50 max-w-[90vw] -translate-x-1/2 rounded-xl border border-molten/40 bg-card px-4 py-2.5 font-mono text-[12px] leading-relaxed text-foreground shadow-lg"
+          >
+            {toast}
+          </motion.div>
+        )}
 
         <div aria-live="polite" className="sr-only">
           {announcement}

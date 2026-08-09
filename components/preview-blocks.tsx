@@ -41,7 +41,7 @@ export function SectionBlock({ section }: { section: DocSection }) {
             title="Copy section"
             onClick={copySection}
           >
-            {copied ? <Check className="size-3.5 text-fam-sheet" /> : <Copy className="size-3.5" />}
+            {copied ? <Check className="size-3.5 text-paper-ok" /> : <Copy className="size-3.5" />}
           </Button>
         </div>
       )}
@@ -85,20 +85,20 @@ export function ChunkBlock({
       data-chunk={chunk.index}
       className="scroll-mt-4 pb-6 pt-2 [content-visibility:auto] [contain-intrinsic-size:auto_320px]"
     >
-      <div className="mb-3 flex items-center gap-2.5 rounded-r-md border-l-2 border-molten bg-[#f1f3f4] py-1.5 pl-3 pr-2">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-paper-muted">
+      <div className="mb-3 flex items-center gap-2.5 rounded-r-md border-l-2 border-molten bg-paper-chip py-1.5 pl-3 pr-2">
+        <span className="font-mono text-[11px] uppercase tracking-wider text-paper-muted">
           Chunk {String(chunk.index).padStart(2, "0")}
         </span>
-        <span className="font-mono text-[10px] text-paper-muted">
+        <span className="font-mono text-[11px] text-paper-muted">
           · {chunk.tokens} {tokenLabel}
         </span>
         {headingTail && (
-          <span className="truncate font-mono text-[10px] text-paper-muted">
+          <span className="truncate font-mono text-[11px] text-paper-muted">
             · {headingTail.replace(/^#{1,6} +/, "")}
           </span>
         )}
         {chunk.meta.oversizedTable && (
-          <span className="font-mono text-[10px] uppercase tracking-wide text-paper-muted">
+          <span className="font-mono text-[11px] uppercase tracking-wide text-paper-muted">
             · oversized table
           </span>
         )}
@@ -112,7 +112,7 @@ export function ChunkBlock({
             onClick={copyChunk}
           >
             {copied ? (
-              <Check className="size-3.5 text-fam-sheet" />
+              <Check className="size-3.5 text-paper-ok" />
             ) : (
               <Copy className="size-3.5" />
             )}

@@ -85,12 +85,6 @@ export function FurnaceDropzone({
   const onPaste = (e: React.ClipboardEvent) => {
     if (e.clipboardData.files.length > 0) handleFiles(e.clipboardData.files);
   };
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      openPicker();
-    }
-  };
 
   const glow = (
     <div
@@ -120,10 +114,7 @@ export function FurnaceDropzone({
   if (compact) {
     return (
       <section
-        role="button"
-        tabIndex={0}
         aria-label="Add more documents — drop files here, paste, or choose files"
-        onKeyDown={onKeyDown}
         onPaste={onPaste}
         onDragEnter={onDragEnter}
         onDragOver={onDragOver}
@@ -153,13 +144,29 @@ export function FurnaceDropzone({
             </Button>
           </div>
           {engine === "loading" && (
-            <div className="flex items-center gap-2" role="progressbar" aria-valuetext="Loading the conversion engine">
+            <div className="flex items-center gap-2" role="progressbar" aria-label="Loading the conversion engine" aria-valuetext="Loading the conversion engine">
               <div className="h-1 w-24 overflow-hidden rounded-full bg-muted">
                 <div className="h-full w-1/3 rounded-full bg-molten animate-shimmer" />
               </div>
-              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
                 firing up
               </span>
+            </div>
+          )}
+          {engine === "error" && (
+            <div className="flex items-center gap-2" role="alert">
+              <span className="font-mono text-[11px] text-destructive">Engine failed to load</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.location.reload();
+                }}
+              >
+                Reload
+              </Button>
             </div>
           )}
         </div>
@@ -170,10 +177,7 @@ export function FurnaceDropzone({
 
   return (
     <section
-      role="button"
-      tabIndex={0}
       aria-label="Add documents — drop files here, paste, or choose files"
-      onKeyDown={onKeyDown}
       onPaste={onPaste}
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
@@ -229,12 +233,30 @@ export function FurnaceDropzone({
         </div>
         {engine === "loading" && (
           <div className="mt-8 w-full max-w-sm">
-            <div className="h-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuetext="Loading the conversion engine">
+            <div className="h-1 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Loading the conversion engine" aria-valuetext="Loading the conversion engine">
               <div className="h-full w-1/3 rounded-full bg-molten animate-shimmer" />
             </div>
             <p className="mt-2.5 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
               Firing up — loading the conversion engine (one-time, ~6&nbsp;MB)
             </p>
+          </div>
+        )}
+        {engine === "error" && (
+          <div className="mt-8 flex flex-col items-center gap-3" role="alert">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-destructive">
+              Engine failed to load
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-10"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.location.reload();
+              }}
+            >
+              Reload the page
+            </Button>
           </div>
         )}
       </div>
